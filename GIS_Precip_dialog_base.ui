@@ -6,494 +6,730 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>670</width>
-    <height>445</height>
+    <width>607</width>
+    <height>616</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>GISPrecip</string>
   </property>
-  <layout class="QGridLayout" name="gridLayout_4">
-   <item row="0" column="0">
+  <property name="layoutDirection">
+   <enum>Qt::RightToLeft</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_16">
+   <item>
     <layout class="QGridLayout" name="mainGridLayout">
      <item row="0" column="1">
       <widget class="QTabWidget" name="tabWidget">
+       <property name="layoutDirection">
+        <enum>Qt::LeftToRight</enum>
+       </property>
        <property name="currentIndex">
-        <number>0</number>
+        <number>1</number>
        </property>
        <widget class="QWidget" name="tab">
         <attribute name="title">
          <string>Model</string>
         </attribute>
-        <widget class="QWidget" name="formLayoutWidget_10">
-         <property name="geometry">
-          <rect>
-           <x>140</x>
-           <y>30</y>
-           <width>294</width>
-           <height>233</height>
-          </rect>
-         </property>
-         <layout class="QFormLayout" name="formLayout">
-          <property name="sizeConstraint">
-           <enum>QLayout::SetMinimumSize</enum>
-          </property>
-          <item row="0" column="0">
-           <widget class="QLabel" name="Label_SatData_5">
-            <property name="text">
-             <string>GMI Data</string>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <widget class="QScrollArea" name="scrollArea">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents_2">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>561</width>
+              <height>369</height>
+             </rect>
             </property>
+            <layout class="QVBoxLayout" name="verticalLayout_2">
+             <item>
+              <layout class="QFormLayout" name="formLayout_Model">
+               <property name="sizeConstraint">
+                <enum>QLayout::SetMinimumSize</enum>
+               </property>
+               <item row="0" column="0">
+                <widget class="QLabel" name="Label_SatData_5">
+                 <property name="text">
+                  <string>GMI Data</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QgsCheckableComboBox" name="comboBox_InputGMI"/>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="Label_RadarData_9">
+                 <property name="text">
+                  <string>Surface Precipitation Data</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QgsCheckableComboBox" name="comboBox_InputSurfPrecip"/>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="Label_TrainedModel_10">
+                 <property name="text">
+                  <string>Model</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QComboBox" name="comboBox_InputModel"/>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="Label_RadarData_10">
+                 <property name="text">
+                  <string>Preprocess</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <layout class="QVBoxLayout" name="verticalLayout_3">
+                 <item>
+                  <widget class="QCheckBox" name="checkBox_Normalize">
+                   <property name="text">
+                    <string>Normalize</string>
+                   </property>
+                   <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="checkBox_Interpolate">
+                   <property name="text">
+                    <string>Interpolate</string>
+                   </property>
+                   <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="checkBox_Undersampling">
+                   <property name="text">
+                    <string>Undersampling</string>
+                   </property>
+                   <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item row="4" column="0">
+                <widget class="QPushButton" name="button_TrainModel">
+                 <property name="text">
+                  <string>Train Model</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QProgressBar" name="progressBar_TrainModel">
+                 <property name="value">
+                  <number>0</number>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="textVisible">
+                  <bool>true</bool>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="invertedAppearance">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QPushButton" name="Button_ExportData">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="text">
+                  <string>Export Model</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="QgsFileWidget" name="fileWidget_ExportModel"/>
+               </item>
+               <item row="6" column="0">
+                <widget class="QPushButton" name="button_LoadModel">
+                 <property name="enabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="text">
+                  <string>Load Model</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="1">
+                <widget class="QgsFileWidget" name="fileWidget_LoadModel"/>
+               </item>
+              </layout>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QgsCheckableComboBox" name="comboBox_InputGMI"/>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="Label_RadarData_9">
-            <property name="text">
-             <string>Surface Precipitation Data</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QgsCheckableComboBox" name="comboBox_InputSurfPrecip"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="Label_RadarData_10">
-            <property name="text">
-             <string>Preprocess</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QCheckBox" name="CheckBox_Interpolate">
-            <property name="text">
-             <string>Interpolate</string>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QCheckBox" name="CheckBox_Normalize">
-            <property name="text">
-             <string>Normalize</string>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="Label_TrainedModel_10">
-            <property name="text">
-             <string>Model</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QComboBox" name="comboBox_InputModel"/>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="Label_TrainedModel_11">
-            <property name="text">
-             <string>Model Parameters</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QLineEdit" name="lineEdit_InputModelParams"/>
-          </item>
-          <item row="6" column="0">
-           <widget class="QPushButton" name="button_TrainModel">
-            <property name="text">
-             <string>Train Model</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QProgressBar" name="progressBar_TrainModel">
-            <property name="value">
-             <number>0</number>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="textVisible">
-             <bool>true</bool>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="invertedAppearance">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="0">
-           <widget class="QPushButton" name="Button_ExportData">
-            <property name="enabled">
-             <bool>false</bool>
-            </property>
-            <property name="text">
-             <string>Export Model</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="1">
-           <widget class="QgsFileWidget" name="fileWidget_ExportModel"/>
-          </item>
-          <item row="8" column="0">
-           <widget class="QPushButton" name="button_LoadModel">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="text">
-             <string>Load Model</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="1">
-           <widget class="QgsFileWidget" name="fileWidget_LoadModel"/>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QToolButton" name="toolButton_ModelHelp">
-         <property name="geometry">
-          <rect>
-           <x>620</x>
-           <y>260</y>
-           <width>18</width>
-           <height>19</height>
-          </rect>
-         </property>
-         <property name="toolTip">
-          <string>Help</string>
-         </property>
-         <property name="text">
-          <string>?</string>
-         </property>
-        </widget>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButton_ModelHelp">
+           <property name="toolTip">
+            <string>Help</string>
+           </property>
+           <property name="layoutDirection">
+            <enum>Qt::RightToLeft</enum>
+           </property>
+           <property name="text">
+            <string>?</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
        <widget class="QWidget" name="tab_2">
         <attribute name="title">
          <string>Assessment</string>
         </attribute>
-        <widget class="QWidget" name="formLayoutWidget_11">
-         <property name="geometry">
-          <rect>
-           <x>180</x>
-           <y>50</y>
-           <width>294</width>
-           <height>129</height>
-          </rect>
-         </property>
-         <layout class="QFormLayout" name="formLayout_13">
-          <item row="1" column="0">
-           <widget class="QLabel" name="Label_ReferenceData_4">
+        <layout class="QVBoxLayout" name="verticalLayout_15">
+         <item>
+          <widget class="QScrollArea" name="scrollArea_2">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents_3">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>544</width>
+              <height>145</height>
+             </rect>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_4">
+             <item>
+              <layout class="QFormLayout" name="formLayout_13">
+               <item row="1" column="0">
+                <widget class="QLabel" name="Label_ReferenceData_4">
+                 <property name="text">
+                  <string>Surface Precipitation Data</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QPushButton" name="button_RunTest">
+                 <property name="text">
+                  <string>Run Test</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QProgressBar" name="progressBar_RunTest">
+                 <property name="value">
+                  <number>0</number>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="textVisible">
+                  <bool>true</bool>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="invertedAppearance">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="Label_ForecastData_10">
+                 <property name="text">
+                  <string>GMI Data</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QgsCheckableComboBox" name="comboBox_TestGMI"/>
+               </item>
+               <item row="1" column="1">
+                <widget class="QgsCheckableComboBox" name="comboBox_TestSurfPrecip"/>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="Label_ReferenceData_5">
+                 <property name="text">
+                  <string>Test Output</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="Label_ReferenceData_6">
+                 <property name="text">
+                  <string>Error Output</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QgsFileWidget" name="fileWidget_TestOutput">
+                 <property name="filter">
+                  <string>netCFD(*.nc)</string>
+                 </property>
+                 <property name="defaultRoot">
+                  <string/>
+                 </property>
+                 <property name="storageMode">
+                  <enum>QgsFileWidget::GetDirectory</enum>
+                 </property>
+                 <property name="relativeStorage">
+                  <enum>QgsFileWidget::Absolute</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QgsFileWidget" name="fileWidget_ErrorOutput">
+                 <property name="filter">
+                  <string>netCFD(*.nc)</string>
+                 </property>
+                 <property name="storageMode">
+                  <enum>QgsFileWidget::SaveFile</enum>
+                 </property>
+                 <property name="relativeStorage">
+                  <enum>QgsFileWidget::RelativeProject</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTableWidget" name="tableWidget_ModelMetrics">
+           <property name="enabled">
+            <bool>true</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="sizeAdjustPolicy">
+            <enum>QAbstractScrollArea::AdjustToContents</enum>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+           <property name="rowCount">
+            <number>1</number>
+           </property>
+           <property name="columnCount">
+            <number>5</number>
+           </property>
+           <attribute name="horizontalHeaderCascadingSectionResizes">
+            <bool>false</bool>
+           </attribute>
+           <attribute name="horizontalHeaderMinimumSectionSize">
+            <number>20</number>
+           </attribute>
+           <attribute name="horizontalHeaderDefaultSectionSize">
+            <number>60</number>
+           </attribute>
+           <attribute name="verticalHeaderMinimumSectionSize">
+            <number>20</number>
+           </attribute>
+           <attribute name="verticalHeaderDefaultSectionSize">
+            <number>20</number>
+           </attribute>
+           <row>
             <property name="text">
-             <string>Surface Precipitation Data</string>
+             <string>Model</string>
             </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QPushButton" name="button_RunTest">
+           </row>
+           <column>
             <property name="text">
-             <string>Run Test</string>
+             <string>Bias</string>
             </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QProgressBar" name="progressBar_RunTest">
-            <property name="value">
-             <number>0</number>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="textVisible">
-             <bool>true</bool>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="invertedAppearance">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="Label_ForecastData_10">
+           </column>
+           <column>
             <property name="text">
-             <string>GMI Data</string>
+             <string>MSE</string>
             </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QgsCheckableComboBox" name="comboBox_TestGMI"/>
-          </item>
-          <item row="1" column="1">
-           <widget class="QgsCheckableComboBox" name="comboBox_TestSurfPrecip"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="Label_ReferenceData_5">
+           </column>
+           <column>
             <property name="text">
-             <string>Test Output</string>
+             <string>MAE</string>
             </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="Label_ReferenceData_6">
+           </column>
+           <column>
             <property name="text">
-             <string>Error Output</string>
+             <string>SMAPE</string>
             </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QgsFileWidget" name="fileWidget_TestOutput">
-            <property name="filter">
-             <string>netCFD(*.nc)</string>
+           </column>
+           <column>
+            <property name="text">
+             <string>Lin. Corr.</string>
             </property>
-            <property name="defaultRoot">
+           </column>
+           <item row="0" column="0">
+            <property name="text">
              <string/>
             </property>
-            <property name="storageMode">
-             <enum>QgsFileWidget::SaveFile</enum>
-            </property>
-            <property name="relativeStorage">
-             <enum>QgsFileWidget::RelativeProject</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QgsFileWidget" name="fileWidget_ErrorOutput">
-            <property name="filter">
-             <string>netCFD(*.nc)</string>
-            </property>
-            <property name="storageMode">
-             <enum>QgsFileWidget::SaveFile</enum>
-            </property>
-            <property name="relativeStorage">
-             <enum>QgsFileWidget::RelativeProject</enum>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QTableWidget" name="tableWidget_ModelMetrics">
-         <property name="geometry">
-          <rect>
-           <x>160</x>
-           <y>190</y>
-           <width>341</width>
-           <height>41</height>
-          </rect>
-         </property>
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="sizeAdjustPolicy">
-          <enum>QAbstractScrollArea::AdjustToContents</enum>
-         </property>
-         <property name="alternatingRowColors">
-          <bool>true</bool>
-         </property>
-         <property name="rowCount">
-          <number>1</number>
-         </property>
-         <property name="columnCount">
-          <number>5</number>
-         </property>
-         <attribute name="horizontalHeaderCascadingSectionResizes">
-          <bool>false</bool>
-         </attribute>
-         <attribute name="horizontalHeaderMinimumSectionSize">
-          <number>20</number>
-         </attribute>
-         <attribute name="horizontalHeaderDefaultSectionSize">
-          <number>60</number>
-         </attribute>
-         <attribute name="verticalHeaderMinimumSectionSize">
-          <number>20</number>
-         </attribute>
-         <attribute name="verticalHeaderDefaultSectionSize">
-          <number>20</number>
-         </attribute>
-         <row>
-          <property name="text">
-           <string>Model</string>
-          </property>
-         </row>
-         <column>
-          <property name="text">
-           <string>Bias</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>MSE</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>MAE</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>SMAPE</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Lin. Corr.</string>
-          </property>
-         </column>
-         <item row="0" column="0">
-          <property name="text">
-           <string/>
-          </property>
+           </item>
+          </widget>
          </item>
-        </widget>
-        <widget class="QToolButton" name="toolButton_AssessmentHelp">
-         <property name="geometry">
-          <rect>
-           <x>620</x>
-           <y>260</y>
-           <width>18</width>
-           <height>19</height>
-          </rect>
-         </property>
-         <property name="toolTip">
-          <string>Help</string>
-         </property>
-         <property name="text">
-          <string>?</string>
-         </property>
-        </widget>
+         <item>
+          <widget class="QTableWidget" name="tableWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>100</height>
+            </size>
+           </property>
+           <attribute name="horizontalHeaderMinimumSectionSize">
+            <number>20</number>
+           </attribute>
+           <attribute name="horizontalHeaderDefaultSectionSize">
+            <number>75</number>
+           </attribute>
+           <attribute name="horizontalHeaderHighlightSections">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="verticalHeaderMinimumSectionSize">
+            <number>20</number>
+           </attribute>
+           <attribute name="verticalHeaderDefaultSectionSize">
+            <number>23</number>
+           </attribute>
+           <row>
+            <property name="text">
+             <string>No Rain</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Moderate Rain</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Soft Rain</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Heavy Rain</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Total</string>
+            </property>
+           </row>
+           <column>
+            <property name="text">
+             <string>Precision</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Recall</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>F1-Score</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Support</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Accurary</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Macro Avg</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Weighted Avg</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_5">
+           <item>
+            <widget class="QLabel" name="label_2">
+             <property name="autoFillBackground">
+              <bool>true</bool>
+             </property>
+             <property name="text">
+              <string>Predicted</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout">
+             <item>
+              <widget class="QLabel" name="label">
+               <property name="autoFillBackground">
+                <bool>true</bool>
+               </property>
+               <property name="text">
+                <string>Actual</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QTableWidget" name="tableWidget_ModelMetricsClassification">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>16777215</width>
+                 <height>140</height>
+                </size>
+               </property>
+               <property name="rowCount">
+                <number>4</number>
+               </property>
+               <property name="columnCount">
+                <number>4</number>
+               </property>
+               <attribute name="horizontalHeaderMinimumSectionSize">
+                <number>20</number>
+               </attribute>
+               <attribute name="horizontalHeaderDefaultSectionSize">
+                <number>85</number>
+               </attribute>
+               <attribute name="verticalHeaderMinimumSectionSize">
+                <number>20</number>
+               </attribute>
+               <attribute name="verticalHeaderDefaultSectionSize">
+                <number>20</number>
+               </attribute>
+               <row>
+                <property name="text">
+                 <string>No Rain</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Soft Rain</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Moderate Rain</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Heavy Rain</string>
+                </property>
+               </row>
+               <column>
+                <property name="text">
+                 <string>No Rain</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Soft Rain</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Moderate Rain</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Heavy Rain</string>
+                </property>
+               </column>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButton_AssessmentHelp">
+           <property name="toolTip">
+            <string>Help</string>
+           </property>
+           <property name="layoutDirection">
+            <enum>Qt::RightToLeft</enum>
+           </property>
+           <property name="text">
+            <string>?</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
        <widget class="QWidget" name="tab_3">
         <attribute name="title">
          <string>Prediction</string>
         </attribute>
-        <widget class="QWidget" name="formLayoutWidget_12">
-         <property name="geometry">
-          <rect>
-           <x>190</x>
-           <y>100</y>
-           <width>237</width>
-           <height>76</height>
-          </rect>
-         </property>
-         <layout class="QFormLayout" name="formLayout_14">
-          <item row="1" column="1">
-           <widget class="QgsFileWidget" name="fileWidget_ForecastOutput">
-            <property name="filter">
-             <string>netCFD(*.nc)</string>
+        <layout class="QVBoxLayout" name="verticalLayout_7">
+         <item>
+          <widget class="QScrollArea" name="scrollArea_3">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents_4">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>561</width>
+              <height>369</height>
+             </rect>
             </property>
-            <property name="storageMode">
-             <enum>QgsFileWidget::SaveFile</enum>
-            </property>
-            <property name="relativeStorage">
-             <enum>QgsFileWidget::RelativeProject</enum>
-            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_6">
+             <item>
+              <layout class="QFormLayout" name="formLayout_14">
+               <item row="1" column="1">
+                <widget class="QgsFileWidget" name="fileWidget_ForecastOutput">
+                 <property name="filter">
+                  <string>netCFD(*.nc)</string>
+                 </property>
+                 <property name="storageMode">
+                  <enum>QgsFileWidget::SaveFile</enum>
+                 </property>
+                 <property name="relativeStorage">
+                  <enum>QgsFileWidget::RelativeProject</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="Label_ForecastData_11">
+                 <property name="toolTip">
+                  <string/>
+                 </property>
+                 <property name="statusTip">
+                  <string>lhjlhljhlh</string>
+                 </property>
+                 <property name="whatsThis">
+                  <string>lhjlhljhlhlh</string>
+                 </property>
+                 <property name="text">
+                  <string>Forecast Output</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="Label_ForecastData_12">
+                 <property name="toolTip">
+                  <string/>
+                 </property>
+                 <property name="statusTip">
+                  <string>lhjlhljhlh</string>
+                 </property>
+                 <property name="whatsThis">
+                  <string>lhjlhljhlhlh</string>
+                 </property>
+                 <property name="text">
+                  <string>GMI Data</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QgsCheckableComboBox" name="comboBox_ForecastGMI"/>
+               </item>
+               <item row="2" column="0">
+                <widget class="QPushButton" name="button_Predict">
+                 <property name="enabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="text">
+                  <string>Predict</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QProgressBar" name="progressBar_Predict">
+                 <property name="value">
+                  <number>0</number>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="textVisible">
+                  <bool>true</bool>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="invertedAppearance">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="Label_ForecastData_11">
-            <property name="toolTip">
-             <string/>
-            </property>
-            <property name="statusTip">
-             <string>lhjlhljhlh</string>
-            </property>
-            <property name="whatsThis">
-             <string>lhjlhljhlhlh</string>
-            </property>
-            <property name="text">
-             <string>Forecast Output</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="Label_ForecastData_12">
-            <property name="toolTip">
-             <string/>
-            </property>
-            <property name="statusTip">
-             <string>lhjlhljhlh</string>
-            </property>
-            <property name="whatsThis">
-             <string>lhjlhljhlhlh</string>
-            </property>
-            <property name="text">
-             <string>GMI Data</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QgsCheckableComboBox" name="comboBox_ForecastGMI"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QPushButton" name="button_Predict">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="text">
-             <string>Predict</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QProgressBar" name="progressBar_Predict">
-            <property name="value">
-             <number>0</number>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="textVisible">
-             <bool>true</bool>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="invertedAppearance">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-        <widget class="QToolButton" name="toolButton_PredictionHelp">
-         <property name="geometry">
-          <rect>
-           <x>620</x>
-           <y>260</y>
-           <width>18</width>
-           <height>19</height>
-          </rect>
-         </property>
-         <property name="toolTip">
-          <string>Help</string>
-         </property>
-         <property name="text">
-          <string>?</string>
-         </property>
-        </widget>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButton_PredictionHelp">
+           <property name="toolTip">
+            <string>Help</string>
+           </property>
+           <property name="layoutDirection">
+            <enum>Qt::RightToLeft</enum>
+           </property>
+           <property name="text">
+            <string>?</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </widget>
      </item>
     </layout>
    </item>
-   <item row="1" column="0">
+   <item>
     <widget class="QTextEdit" name="textEdit_Console">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
@@ -501,14 +737,17 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>40</height>
+       <height>150</height>
       </size>
      </property>
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>100</height>
+       <height>16777215</height>
       </size>
+     </property>
+     <property name="layoutDirection">
+      <enum>Qt::LeftToRight</enum>
      </property>
      <property name="readOnly">
       <bool>true</bool>

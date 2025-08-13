@@ -1,0 +1,22 @@
+<PAMDataset>
+  <Subdataset name="surface_precip">
+    <PAMDataset>
+      <Metadata>
+        <MDI key="latitude#_FillValue">nan</MDI>
+        <MDI key="longitude#_FillValue">nan</MDI>
+        <MDI key="NC_GLOBAL#lower_left_col">2578</MDI>
+        <MDI key="NC_GLOBAL#lower_left_row">1047</MDI>
+        <MDI key="surface_precip#scale_factor">0.01</MDI>
+        <MDI key="surface_precip#_FillValue">65535</MDI>
+      </Metadata>
+      <PAMRasterBand band="1">
+        <Metadata>
+          <MDI key="STATISTICS_MINIMUM">0</MDI>
+          <MDI key="STATISTICS_MAXIMUM">391</MDI>
+          <MDI key="STATISTICS_MEAN">0.10647832641513</MDI>
+          <MDI key="STATISTICS_STDDEV">4.0571648801463</MDI>
+        </Metadata>
+      </PAMRasterBand>
+    </PAMDataset>
+  </Subdataset>
+</PAMDataset>

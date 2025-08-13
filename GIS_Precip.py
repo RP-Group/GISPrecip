@@ -21,27 +21,31 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QFileDialog, QTableWidgetItem
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QRegExp
+from qgis.PyQt.QtGui import QIcon, QRegExpValidator
+from qgis.PyQt.QtWidgets import QAction, QFileDialog, QTableWidgetItem, QLabel, QComboBox, QFormLayout, QLineEdit, QSpinBox, QDoubleSpinBox
 from qgis.core import QgsProject, QgsRasterLayer
+from qgis.core import QgsSingleBandPseudoColorRenderer, QgsColorRampShader, QgsRasterShader, QgsStyle
+from qgis.gui import QgsSingleBandPseudoColorRendererWidget
 
 import numpy as np
 
 from netCDF4 import Dataset
 
 from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.neural_network import MLPRegressor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, confusion_matrix, mean_squared_error, mean_absolute_error
 from scipy.stats import pearsonr
 from imblearn.under_sampling import RandomUnderSampler
 
 from scipy.interpolate import griddata
+from statsmodels.regression.linear_model import RegressionModel
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -49,10 +53,50 @@ from .resources import *
 from .GIS_Precip_dialog import GISPrecipDialog
 import os.path
 from pathlib import Path
+import re
 
 
 class GISPrecip:
     """QGIS Plugin Implementation."""
+
+    def __init__(self, iface):
+        """Constructor.
+
+        :param iface: An interface instance that will be passed to this class
+            which provides the hook by which you can manipulate the QGIS
+            application at run time.
+        :type iface: QgsInterface
+        """
+        # Save reference to the QGIS interface
+        self.iface = iface
+        # initialize plugin directory
+        self.plugin_dir = os.path.dirname(__file__)
+        # initialize locale
+        locale = QSettings().value('locale/userLocale')[0:2]
+        locale_path = os.path.join(
+            self.plugin_dir,
+            'i18n',
+            'GISPrecip_{}.qm'.format(locale))
+
+        if os.path.exists(locale_path):
+            self.translator = QTranslator()
+            self.translator.load(locale_path)
+            QCoreApplication.installTranslator(self.translator)
+
+        # Declare instance attributes
+        self.actions = []
+        self.menu = self.tr(u'&GISPrecip')
+
+        # Check if plugin was started the first time in current QGIS session
+        # Must be set in initGui() to survive plugin reloads
+        self.first_start = None
+
+        self.model = None
+
+        self.model_params_layout = None
+        self.SVM_degree_param = None
+        self.SVM_gamma_param = None
+        self.SVM_gamma_value_param = None
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -69,44 +113,56 @@ class GISPrecip:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('GISPrecip', message)
 
-    def __init__(self, iface):
-        """Constructor.
-
-        :param iface: An interface instance that will be passed to this class
-            which provides the hook by which you can manipulate the QGIS
-            application at run time.
-        :type iface: QgsInterface
-        """
-        self.iface = iface
-        self.plugin_dir = os.path.dirname(__file__)
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'GISPrecip_{}.qm'.format(locale))
-
-        if os.path.exists(locale_path):
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-            QCoreApplication.installTranslator(self.translator)
-
-        self.actions = []
-        self.menu = self.tr(u'&GISPrecip')
-        self.first_start = None
-        self.model = None
-        self.dlg = None
 
     def add_action(
-            self,
-            icon_path,
-            text,
-            callback,
-            enabled_flag=True,
-            add_to_menu=True,
-            add_to_toolbar=True,
-            status_tip=None,
-            whats_this=None,
-            parent=None):
+        self,
+        icon_path,
+        text,
+        callback,
+        enabled_flag=True,
+        add_to_menu=True,
+        add_to_toolbar=True,
+        status_tip=None,
+        whats_this=None,
+        parent=None):
+        """Add a toolbar icon to the toolbar.
+
+        :param icon_path: Path to the icon for this action. Can be a resource
+            path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
+        :type icon_path: str
+
+        :param text: Text that should be shown in menu items for this action.
+        :type text: str
+
+        :param callback: Function to be called when the action is triggered.
+        :type callback: function
+
+        :param enabled_flag: A flag indicating if the action should be enabled
+            by default. Defaults to True.
+        :type enabled_flag: bool
+
+        :param add_to_menu: Flag indicating whether the action should also
+            be added to the menu. Defaults to True.
+        :type add_to_menu: bool
+
+        :param add_to_toolbar: Flag indicating whether the action should also
+            be added to the toolbar. Defaults to True.
+        :type add_to_toolbar: bool
+
+        :param status_tip: Optional text to show in a popup when mouse pointer
+            hovers over the action.
+        :type status_tip: str
+
+        :param parent: Parent widget for the new action. Defaults None.
+        :type parent: QWidget
+
+        :param whats_this: Optional text to show in the status bar when the
+            mouse pointer hovers over the action.
+
+        :returns: The action that was created. Note that the action is also
+            added to self.actions list.
+        :rtype: QAction
+        """
 
         icon = QIcon(icon_path)
         action = QAction(icon, text, parent)
@@ -120,6 +176,7 @@ class GISPrecip:
             action.setWhatsThis(whats_this)
 
         if add_to_toolbar:
+            # Adds plugin icon to Plugins toolbar
             self.iface.addToolBarIcon(action)
 
         if add_to_menu:
@@ -132,6 +189,8 @@ class GISPrecip:
         return action
 
     def initGui(self):
+        """Create the menu entries and toolbar icons inside the QGIS GUI."""
+
         icon_path = ':/plugins/GIS_Precip/icon.png'
         self.add_action(
             icon_path,
@@ -139,7 +198,9 @@ class GISPrecip:
             callback=self.run,
             parent=self.iface.mainWindow())
 
+        # will be set False in run()
         self.first_start = True
+
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -148,6 +209,12 @@ class GISPrecip:
                 self.tr(u'&GISPrecip'),
                 action)
             self.iface.removeToolBarIcon(action)
+
+        # # Delete the Temp directory if it exists
+        # temp_dir = os.path.join(os.getcwd(), 'Temp')
+        # if os.path.exists(temp_dir) and os.path.isdir(temp_dir):
+        #     import shutil
+        #     shutil.rmtree(temp_dir)
 
     def get_layer_by_name(self, layer_name, idx=0):
         """Get a layer by its name."""
@@ -159,16 +226,38 @@ class GISPrecip:
 
     def get_project_or_working_directory(self):
         """Get the project directory (if available) or working directory."""
+
+        # Get the project instance
         project = QgsProject.instance()
+
+        # Get the full path to the project file
         project_filepath = project.fileName()
+
+        # Check if a project is loaded
         if project_filepath:
-            return os.path.dirname(project_filepath)
+            # Extract the directory from the project file path
+            project_directory = os.path.dirname(project_filepath)
         else:
-            return os.getcwd()
+            # If no project is loaded, use the current working directory
+            project_directory = os.getcwd()
+        return project_directory
+
+    # Helper function to recursively collect all layers from the layer tree
+    def get_all_layers_with_children(self, tree_nodes):
+        layers = []
+        for node in tree_nodes:
+            if hasattr(node, 'layer') and node.layer() is not None:
+                layers.append(node.layer())
+            elif hasattr(node, 'children'):
+                layers.extend(self.get_all_layers_with_children(node.children()))
+        return layers
 
     def get_long_lat(self, layer):
         """Get longitude and latitude from the layer."""
+        # This method will be implemented to extract longitudes and latitudes
         self.dlg.Log("Extracting longitude and latitude from layer: {}".format(layer.name()))
+
+        # Assuming the layer has a CRS with geographic coordinates
         crs = layer.crs()
         if crs.isGeographic():
             extent = layer.extent()
@@ -182,418 +271,672 @@ class GISPrecip:
 
     def get_gmi_data(self, gmi_layer):
         """Preprocess GMI data layer."""
-        if not isinstance(gmi_layer, QgsRasterLayer):
-            self.dlg.Log(
-                f"ERROR: A camada selecionada '{gmi_layer.name()}' não é uma camada Raster. Por favor, selecione uma camada Raster válida.")
-            return None, None, None
-
+        # This method will be implemented to preprocess GMI data
         self.dlg.Log("Preprocessing GMI data layer: {}".format(gmi_layer.name()))
+
         mask = True
-        arr = gmi_layer.as_numpy(mask)
+        arr = gmi_layer.as_numpy(mask)  # 13 bands, size is (bands, lat, long) -> (bands, width, height)
         long, lat = self.get_long_lat(gmi_layer)
-        long_coords, lat_coords = np.meshgrid(lat, long, indexing='ij')
+
+        # Create a grid of coordinates
+        long_coords, lat_coords = np.meshgrid(long, lat, indexing='ij')
+
+        # Flatten everything
         long_flat = long_coords.flatten()
         lat_flat = lat_coords.flatten()
-        data_flat = arr.reshape(gmi_layer.bandCount(), -1).T
+        data_flat = arr.reshape(13, -1).T  # shape (width*height, bands)
+
+        # # Concatenate
+        # output = np.column_stack((x_flat, y_flat, data_flat))  # shape (width*height, (long,lat,bands))
+
         self.dlg.Log("GMI data preprocessing completed for layer: {}".format(gmi_layer.name()))
         return data_flat, long_flat, lat_flat
 
     def get_surf_precip_data(self, surf_precip_layer):
         """Preprocess surface precipitation data layer."""
-        if not isinstance(surf_precip_layer, QgsRasterLayer):
-            self.dlg.Log(
-                f"ERROR: A camada selecionada '{surf_precip_layer.name()}' não é uma camada Raster. Por favor, selecione uma camada Raster válida.")
-            return None, None, None
-
+        # This method will be implemented to preprocess surface precipitation data
         self.dlg.Log("Preprocessing surface precipitation data layer: {}".format(surf_precip_layer.name()))
+
         mask = True
-        arr = surf_precip_layer.as_numpy(mask)
+        arr = surf_precip_layer.as_numpy(mask) # size is (surface_precip, lat, long) -> (surface_precip, width, height)
         long, lat = self.get_long_lat(surf_precip_layer)
-        long_coords, lat_coords = np.meshgrid(lat, long, indexing='ij')
+
+        # Create a grid of coordinates
+        long_coords, lat_coords = np.meshgrid(long, lat, indexing='ij')
+
+        # Flatten everything
         long_flat = long_coords.flatten()
         lat_flat = lat_coords.flatten()
-        data_flat = arr.reshape(1, -1).T
-        self.dlg.Log(
-            "Surface precipitation data preprocessing completed for layer: {}".format(surf_precip_layer.name()))
+        data_flat = arr.reshape(1, -1).T.flatten()  # shape (width*height, surface_precip)
+
+        # # Concatenate
+        # output = np.column_stack((x_flat, y_flat, data_flat))  # shape (width*height, (long,lat,surface_precip))
+
+        self.dlg.Log("Surface precipitation data preprocessing completed for layer: {}".format(surf_precip_layer.name()))
         return data_flat, long_flat, lat_flat
 
-    def preprocess_data_classifier(self, gmi_data, surf_precip_data, long, lat, model_name, normalize=True,
-                                   under_sample=True):
-        """Preprocess data for classification models."""
-        if gmi_data.shape[0] != surf_precip_data.shape[0]:
-            self.dlg.Log(f"ERRO: A dimensão dos dados de entrada não coincide. "
-                         f"A camada GMI tem {gmi_data.shape[0]} pixels, enquanto a camada de Precipitação tem {surf_precip_data.shape[0]} pixels. "
-                         f"Por favor, use camadas com as mesmas dimensões (largura e altura).")
-            return None, None, None, None
-
-        self.dlg.Log("Preprocessing data for classification...")
-        mask = np.isfinite(gmi_data).all(axis=1) & np.isfinite(surf_precip_data).flatten()
-        if np.ma.isMaskedArray(gmi_data):
-            mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
-        if np.ma.isMaskedArray(surf_precip_data):
-            mask &= ~np.ma.getmaskarray(surf_precip_data).flatten()
-        gmi_data = gmi_data[mask]
-        surf_precip_data = surf_precip_data[mask]
-        long = long[mask]
-        lat = lat[mask]
-
-        # --- NEW: Conditional classification (Binary for SVM, Multiclass for others) ---
+    def convert_to_classification(self, surf_precip_data, model_name):
         if model_name == "SVM":
-            self.dlg.Log("Criando classes binárias (Chuva/Não Chuva) para o modelo SVM.")
-            surf_precip_data = (surf_precip_data > 0.1).astype(int)
+            # Convert precipitation to binary label (rain/no rain)
+            self.dlg.Log("Creating precipitation intensity binary classes (0: No rain, 1: Rain)")
+            return (surf_precip_data > 0.1).astype(int)  # 0 = no rain, 1 = rain
         else:
-            self.dlg.Log("Criando classes de intensidade de chuva (0: Nenhuma, 1: Leve, 2: Moderada, 3: Pesada).")
+            # TODO: QGIS maps the data to colors based on min and max values, not based on the classes defined here
+            self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy)")
             y = surf_precip_data.flatten()
             cat = np.zeros_like(y, dtype=int)
-            cat[(y > 0) & (y <= 5)] = 1  # Leve
-            cat[(y > 5) & (y <= 15)] = 2  # Moderada
-            cat[y > 15] = 3  # Pesada
-            surf_precip_data = cat
+            cat[(y > 0.0) & (y <= 1.0)] = 1  # Leve
+            cat[(y > 1.0) & (y <= 3.0)] = 2  # Moderada
+            cat[y > 3.0] = 3  # Pesada
+            return cat
 
-        if under_sample:
-            self.dlg.Log("Applying Random Under-sampling for class balancing...")
-            gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data,
-                                                                                          surf_precip_data.ravel())
+    def preprocess_data(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
+        """Preprocess the GMI and surface precipitation data."""
+        self.dlg.Log("Preprocessing GMI and surface precipitation data...")
 
-        if normalize:
-            scaler = StandardScaler()
-            gmi_data = scaler.fit_transform(gmi_data)
-
-        self.dlg.Log("Classification data preprocessing completed.")
-        return gmi_data, surf_precip_data, long, lat
-
-    def preprocess_data_regressor(self, gmi_data, surf_precip_data, long, lat, normalize=True):
-        """Preprocess data for regression models."""
-        if gmi_data.shape[0] != surf_precip_data.shape[0]:
-            self.dlg.Log(f"ERRO: A dimensão dos dados de entrada não coincide. "
-                         f"A camada GMI tem {gmi_data.shape[0]} pixels, enquanto a camada de Precipitação tem {surf_precip_data.shape[0]} pixels. "
-                         f"Por favor, use camadas com as mesmas dimensões (largura e altura).")
-            return None, None, None, None
-
-        self.dlg.Log("Preprocessing data for regression...")
+        # Check if the data is valid
         mask = np.isfinite(gmi_data).all(axis=1) & np.isfinite(surf_precip_data).flatten()
+        # mask = np.isfinite(surf_precip_data) & np.all(np.isfinite(gmi_data), axis=1)
+        # Check if the data is masked
         if np.ma.isMaskedArray(gmi_data):
             mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
         if np.ma.isMaskedArray(surf_precip_data):
             mask &= ~np.ma.getmaskarray(surf_precip_data).flatten()
+        # Remove invalid samples
         gmi_data = gmi_data[mask]
         surf_precip_data = surf_precip_data[mask]
         long = long[mask]
         lat = lat[mask]
 
-        if normalize:
-            scaler = StandardScaler()
-            gmi_data = scaler.fit_transform(gmi_data)
+        model_name = self.dlg.comboBox_InputModel.currentText()
+        if self.get_model_type(model_name) == "Classification":
+            surf_precip_data = self.convert_to_classification(surf_precip_data, model_name)
 
-        self.dlg.Log("Regression data preprocessing completed.")
+        if self.get_model_type(model_name) == "Classification":
+            if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
+                # Handle class imbalance using RandomUnderSampler
+                gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data, surf_precip_data)
+
+        self.dlg.Log("Data preprocessing completed.")
         return gmi_data, surf_precip_data, long, lat
 
-    def preprocess_GMI_data(self, gmi_data, long, lat, normalize=True):
-        """Preprocess the GMI data for prediction."""
-        self.dlg.Log("Preprocessing GMI data for prediction...")
-        mask = np.isfinite(gmi_data).all(axis=1)
+    def preprocess_data_test(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
+        """Preprocess the GMI and surface precipitation data."""
+        self.dlg.Log("Preprocessing GMI and surface precipitation data...")
+
+        # Check if the data is valid
+        mask = np.isfinite(gmi_data).all(axis=1) & np.isfinite(surf_precip_data).flatten()
+        # mask = np.isfinite(surf_precip_data) & np.all(np.isfinite(gmi_data), axis=1)
+        # Check if the data is masked
         if np.ma.isMaskedArray(gmi_data):
             mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
+        if np.ma.isMaskedArray(surf_precip_data):
+            mask &= ~np.ma.getmaskarray(surf_precip_data).flatten()
+        # Remove invalid samples
+        gmi_data = gmi_data[mask]
+        surf_precip_data = surf_precip_data[mask]
+        long = long[mask]
+        lat = lat[mask]
+
+        model_name = self.dlg.comboBox_InputModel.currentText()
+        if self.get_model_type(model_name) == "Classification":
+            surf_precip_data = self.convert_to_classification(surf_precip_data, model_name)
+
+        if self.get_model_type(model_name) == "Classification":
+            if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
+                # Handle class imbalance using RandomUnderSampler
+                gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data, surf_precip_data)
+
+        self.dlg.Log("Data preprocessing completed.")
+        return gmi_data, surf_precip_data, long, lat, mask
+
+    def preprocess_GMI_data(self, gmi_data, long, lat, normalize=True):
+        """Preprocess the GMI and surface precipitation data."""
+        self.dlg.Log("Preprocessing GMI data...")
+
+        # Check if the data is valid
+        mask = np.isfinite(gmi_data).all(axis=1)
+        # Check if the data is masked
+        if np.ma.isMaskedArray(gmi_data):
+            mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
+        # Remove invalid samples
         gmi_data = gmi_data[mask]
         long = long[mask]
         lat = lat[mask]
+
         if normalize:
-            scaler = StandardScaler()
-            gmi_data = scaler.fit_transform(gmi_data)
-        self.dlg.Log("Prediction data preprocessing completed.")
+            # Normalize the GMI data
+            gmi_data = self.scaler.transform(gmi_data)
+
+        self.dlg.Log("Data preprocessing completed.")
         return gmi_data, long, lat
+
+    def get_model_type(self, model):
+        if model == 'MLP Regressor':
+            return "Regression"
+        elif model == 'SVM':
+            return "Classification"
+        elif model == 'Random Forest':
+            return "Classification"
+        elif model == 'Decision Tree':
+            return "Classification"
+        elif model == 'AdaBoost':
+            return "Classification"
+        else:
+            return "None"
 
     def get_model_metrics(self, y_true, y_pred):
         """Calculate model metrics."""
         self.dlg.Log("Calculating model metrics...")
+
         bias = np.mean(y_pred - y_true)
         mse = mean_squared_error(y_true, y_pred)
         mae = mean_absolute_error(y_true, y_pred)
 
         def smape(y_true, y_pred):
-            denominator = np.abs(y_true) + np.abs(y_pred)
-            return np.mean(2 * np.abs(y_pred - y_true) / (denominator + 1e-8))
+            # return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
+            return np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
 
         smape_value = smape(y_true, y_pred)
-        if np.std(y_true) > 0 and np.std(y_pred) > 0:
-            lin_corr = np.corrcoef(y_true, y_pred)[0, 1]
-        else:
-            lin_corr = np.nan
+        lin_corr = np.corrcoef(y_true, y_pred)[0, 1]
+
         self.dlg.Log("Model metrics calculated.")
         return bias, mse, mae, smape_value, lin_corr
 
-    def export_to_netCDF4_file(self, width, height, long, lat, data, output_filepath):
-        """Exports the prediction results to a NetCDF file."""
+    def export_to_netCDF4_file(self, width, height, long, lat, mask, data, output_filepath):
+
+        # Create the output directory if it does not exist
         output_dir = os.path.dirname(output_filepath)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Remove existing layer with the same name if it exists
         layer_name = Path(output_filepath).stem
         existing_layer = self.get_layer_by_name(layer_name)
         if existing_layer:
             QgsProject.instance().removeMapLayer(existing_layer.id())
 
-        with Dataset(output_filepath, 'w', format='NETCDF4_CLASSIC') as ncfile:
-            ncfile.createDimension('lon', width)
-            ncfile.createDimension('lat', height)
-            lon_var = ncfile.createVariable('lon', np.float32, ('lon',))
-            lon_var.units = 'degrees'
-            lon_var.long_name = 'Longitude'
-            lat_var = ncfile.createVariable('lat', np.float32, ('lat',))
-            lat_var.units = 'degrees'
-            lat_var.long_name = 'Latitude'
-            surf_precip = ncfile.createVariable('surface_precip', np.float32, ('lat', 'lon',))
-            surf_precip.units = 'mm/h' if self.dlg.comboBox_InputModel.currentText() == "MLP Regressor" else "class"
-            surf_precip.long_name = 'Surface Precipitation'
+        ncfile = Dataset(output_filepath, 'w', format='NETCDF4_CLASSIC')
 
-            grid_lon = np.linspace(min(long), max(long), width)
-            grid_lat = np.linspace(min(lat), max(lat), height)
-            X, Y = np.meshgrid(grid_lon, grid_lat)
+        # Create dimensions
+        lat_dim = ncfile.createDimension('lat', height) # latitude axis
+        lon_dim = ncfile.createDimension('lon', width) # longitude axis
 
-            Z_nearest = griddata((long, lat), data, (X, Y), method='nearest')
-            Z_linear = griddata((long, lat), data, (X, Y), method='linear')
-            Z_nearest[np.isnan(Z_linear)] = np.nan
+        # Create variables
+        lat_var = ncfile.createVariable('lat', np.float32, ('lat',))
+        lat_var.units = 'degrees'
+        lat_var.long_name = 'Latitude'
+        lon_var = ncfile.createVariable('lon', np.float32, ('lon',))
+        lon_var.units = 'degrees'
+        lon_var.long_name = 'Longitude'
+        surf_precip = ncfile.createVariable('surface_precip', np.float32, ('lat', 'lon',))
+        surf_precip.units = 'mm/h'
+        surf_precip.long_name = 'Surface Precipitation'
 
-            lon_var[:] = grid_lon
-            lat_var[:] = grid_lat
-            surf_precip[:, :] = Z_nearest
+        # Fill into full grid with NaNs
+        y_pred_map = np.full(mask.shape, np.nan)
 
+        y_pred_map[mask] = data
+
+        y_pred_map = y_pred_map.reshape(width, height)
+
+        # Write latitudes, longitudes.
+        # Note: the ":" is necessary in these "write" statements
+        lat_var[:] = lat
+        lon_var[:] = long
+        # Write the data.  This writes the whole 3D netCDF variable all at once.
+        surf_precip[:, :] = y_pred_map[::-1, :]
+        # self.dlg.Log("-- Wrote data, temp.shape is now {}".format(surf_precip.shape))
+        # # read data back from variable (by slicing it), print min and max
+        # self.dlg.Log("-- Min/Max values: {}/{}".format(surf_precip[:, :].min(), surf_precip[:, :].max()))
+
+        # Log the output netCDF4 file
+        # self.dlg.Log(ncfile)
+
+        # close the Dataset.
+        ncfile.close()
+
+        # Load the exported netCDF4 file as a raster layer
         raster_layer = QgsRasterLayer(output_filepath, layer_name)
         raster_layer.setCrs(QgsProject.instance().crs())
+        # Set singleband pseudocolor renderer
+        raster_layer.setRenderer(QgsSingleBandPseudoColorRendererWidget(raster_layer).renderer())
         if not raster_layer.isValid():
             self.dlg.Log("Layer failed to load!")
         else:
             QgsProject.instance().addMapLayer(raster_layer)
 
     def train_model(self):
-        """Dispatcher for training model based on user selection."""
+        """Train the model with the selected GMI and Surface Precipitation data."""
+        # This method is implemented to train the model
+        self.dlg.Log("Training model with selected GMI and Surface Precipitation data...")
+
+        self.dlg.progressBar_TrainModel.setValue(0)
+
+        # Fetch the currently loaded layers
+        layers = QgsProject.instance().layerTreeRoot().children()
+
+        # Collect selected GMI layers
+        checkedLayers_GMI = self.dlg.comboBox_InputGMI.checkedItems()
+        checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
+
+        gmi_data_list, surf_precip_list, long_list, lat_list = [], [], [], []
+
+        # Process each GMI and surface precipitation layer as a pair
+        for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
+            selectedLayer_GMI = self.get_layer_by_name(gmi_name)
+            selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
+            bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
+            surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
+
+            gmi_data_list.append(bands)
+            surf_precip_list.append(surfPrecip)
+            long_list.append(long)
+            lat_list.append(lat)
+
+        # Concatenate all data (masked)
+        bands = np.ma.concatenate(gmi_data_list, axis=0)
+        long = np.ma.concatenate(long_list, axis=0)
+        lat = np.ma.concatenate(lat_list, axis=0)
+        surfPrecip = np.ma.concatenate(surf_precip_list, axis=0)
+
+        # Preprocess the data
+        undersampling = self.dlg.checkBox_Undersampling.isChecked()
+        bands, surfPrecip, long, lat = self.preprocess_data(bands, surfPrecip, long, lat, under_sample=undersampling)
+
+        # Create and train the SVM model
         model_name = self.dlg.comboBox_InputModel.currentText()
+        normalizer = True
+        scaler_step = ('scaler', StandardScaler()) if normalizer else None
+        # scaler_step = ('scaler', RobustScaler()) if normalizer else None
+        model_step = None
         if model_name == "MLP Regressor":
-            self.train_model_regressor()
-        else:
-            self.train_model_classifier()
+            # Convert a string like '20;20' to a tuple like (20, 20)
+            hid_layers_str = self.model_params_layout.itemAt(1, 1).widget().text()
+            hidden_layer_sizes = tuple(int(x) for x in hid_layers_str.split(';') if x.strip())
+            model_step = ('mlp', MLPRegressor(
+                activation=self.model_params_layout.itemAt(0, 1).widget().currentText(),
+                hidden_layer_sizes=hidden_layer_sizes,
+                alpha=0.0011045192633616075,
+                learning_rate_init=self.model_params_layout.itemAt(2, 1).widget().value(),
+                max_iter=500,
+                early_stopping=True,
+                n_iter_no_change=10,
+                validation_fraction=0.1,
+                random_state=self.model_params_layout.itemAt(3, 1).widget().value()
+            ))
+        elif model_name == "SVM":
+            degree_param = 3 if self.SVM_degree_param is None else self.SVM_degree_param.value()
+            gamma_param = 'scale' if self.SVM_gamma_param is None else self.SVM_gamma_param.currentText()
+            if gamma_param == 'float':
+                gamma_param = self.SVM_gamma_value_param.value()
+            model_step = ('svm', SVC(
+                kernel=self.model_params_layout.itemAt(0, 1).widget().currentText(),
+                C=self.model_params_layout.itemAt(1, 1).widget().value(),
+                degree=degree_param,
+                gamma=gamma_param,
+                class_weight='balanced', # use balanced weights if rain is rare
+                random_state=self.model_params_layout.itemAt(2, 1).widget().value()))
+        elif model_name == "Random Forest":
+            model_step = ('rf', RandomForestClassifier(
+                n_estimators=self.model_params_layout.itemAt(0, 1).widget().value(),
+                criterion=self.model_params_layout.itemAt(1, 1).widget().currentText(),
+                min_samples_split=self.model_params_layout.itemAt(2, 1).widget().value(),
+                min_impurity_decrease=self.model_params_layout.itemAt(3, 1).widget().value(),
+                random_state=self.model_params_layout.itemAt(4, 1).widget().value(),
+                class_weight='balanced'))
+        elif model_name == "Decision Tree":
+            model_step = ('dt', DecisionTreeClassifier(
+                criterion=self.model_params_layout.itemAt(0, 1).widget().currentText(),
+                splitter=self.model_params_layout.itemAt(1, 1).widget().currentText(),
+                min_samples_split=self.model_params_layout.itemAt(2, 1).widget().value(),
+                min_impurity_decrease=self.model_params_layout.itemAt(3, 1).widget().value(),
+                random_state=self.model_params_layout.itemAt(4, 1).widget().value(),
+                class_weight='balanced'))
+        elif model_name == "AdaBoost":
+            estimator = self.model_params_layout.itemAt(0, 1).widget().currentText()
+            if estimator == "Decision Tree":
+                estimator = DecisionTreeClassifier()
+            model_step = ('ada', AdaBoostClassifier(
+                estimator=estimator,
+                n_estimators=self.model_params_layout.itemAt(1, 1).widget().value(),
+                learning_rate=self.model_params_layout.itemAt(2, 1).widget().value(),
+                random_state=self.model_params_layout.itemAt(3, 1).widget().value()))
+        self.model = Pipeline([scaler_step, model_step])
+        self.model.fit(bands, surfPrecip)
+
+        # Log the training completion
+        self.dlg.progressBar_TrainModel.setValue(100)
+        self.dlg.Log("Model training completed.")
 
     def test_model(self):
-        """Dispatcher for testing model based on user selection."""
-        model_name = self.dlg.comboBox_InputModel.currentText()
-        if model_name == "MLP Regressor":
-            self.test_model_regressor()
-        else:
-            self.test_model_classifier()
+        """Test the model with the selected GMI and Surface Precipitation data."""
+        # This method is implemented to train the model
+        self.dlg.Log("Testing model with selected GMI and Surface Precipitation data...")
 
-    def train_model_classifier(self):
-        """Train a classification model."""
-        self.dlg.Log("Training classification model...")
-        checkedLayers_GMI = self.dlg.comboBox_InputGMI.checkedItems()
-        selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
-        checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
-        selectedLayer_SurfPrecip = self.get_layer_by_name(checkedLayers_SurfPrecip[0])
+        self.dlg.progressBar_RunTest.setValue(0)
 
-        bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-        if bands is None: return
+        # Fetch the currently loaded layers
+        layers = QgsProject.instance().layerTreeRoot().children()
 
-        surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-        if surfPrecip is None: return
-
-        model_name = self.dlg.comboBox_InputModel.currentText()
-        processed_result = self.preprocess_data_classifier(bands, surfPrecip, long, lat, model_name,
-                                                           normalize=True, under_sample=True)
-        if processed_result[0] is None: return
-        bands, surfPrecip, _, _ = processed_result
-
-        if model_name == "SVM":
-            self.model = SVC(kernel='rbf', C=100, gamma='scale', class_weight='balanced')
-        elif model_name == "Random Forest":
-            self.model = RandomForestClassifier(n_estimators=100, class_weight='balanced')
-        elif model_name == "Decision Tree":
-            self.model = DecisionTreeClassifier(class_weight='balanced')
-        elif model_name == "AdaBoost":
-            self.model = AdaBoostClassifier(n_estimators=100, random_state=42)
-
-        self.model.fit(bands, surfPrecip.ravel())
-        self.dlg.progressBar_TrainModel.setValue(100)
-        self.dlg.Log("Classifier model training completed.")
-
-    def train_model_regressor(self):
-        """Train a regression model with optimized hyperparameters."""
-        self.dlg.Log("Training regression model (MLP Regressor) with optimized parameters...")
-        checkedLayers_GMI = self.dlg.comboBox_InputGMI.checkedItems()
-        selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
-        checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
-        selectedLayer_SurfPrecip = self.get_layer_by_name(checkedLayers_SurfPrecip[0])
-
-        bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-        if bands is None: return
-
-        surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-        if surfPrecip is None: return
-
-        processed_result = self.preprocess_data_regressor(bands, surfPrecip, long, lat, normalize=True)
-        if processed_result[0] is None: return
-        bands, surfPrecip, _, _ = processed_result
-
-        self.model = MLPRegressor(
-            hidden_layer_sizes=(249, 413, 402, 170),
-            activation='relu',
-            alpha=0.0011045192633616075,
-            learning_rate_init=0.001176882824072647,
-            max_iter=500,
-            random_state=42
-        )
-
-        self.model.fit(bands, surfPrecip.ravel())
-
-        self.dlg.progressBar_TrainModel.setValue(100)
-        self.dlg.Log("Regressor model training completed.")
-
-    def test_model_classifier(self):
-        """Test the classification model."""
-        self.dlg.Log("Testing classification model...")
+        # Collect selected GMI layers
         checkedLayers_GMI = self.dlg.comboBox_TestGMI.checkedItems()
-        selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
         checkedLayers_SurfPrecip = self.dlg.comboBox_TestSurfPrecip.checkedItems()
-        selectedLayer_SurfPrecip = self.get_layer_by_name(checkedLayers_SurfPrecip[0])
 
-        bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-        if bands is None: return
+        # Collect all true and predicted values for global metrics
+        all_y_true = []
+        all_y_pred = []
 
-        surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-        if surfPrecip is None: return
+        # Process each GMI and surface precipitation layer as a pair
+        for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
+            selectedLayer_GMI = self.get_layer_by_name(gmi_name)
+            bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
+            selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
+            surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
 
+            # Preprocess the data
+            bands, surfPrecip, long, lat, mask = self.preprocess_data_test(bands, surfPrecip, long, lat, under_sample=False)
+
+            # Evaluate the model
+            y_pred = self.model.predict(bands)
+
+            # Manual clip for regression since scikit-learn does not allow to change the output activation function
+            model_name = self.dlg.comboBox_InputModel.currentText()
+            if self.get_model_type(model_name) == "Regression":
+                y_pred = np.maximum(0, y_pred)
+
+            # Collect for global metrics
+            all_y_true.append(surfPrecip.flatten())
+            all_y_pred.append(y_pred.flatten())
+
+            # Export the results to a netCDF4 file and load it as a raster layer
+            long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
+            out_dir = self.dlg.fileWidget_TestOutput.lineEdit().value()
+            if not out_dir:
+                out_dir = os.path.join(os.getcwd(), 'Temp')
+            safe_precip_name = re.sub(r'[^\w\-]', '_', precip_name)
+            filepath = os.path.join(out_dir, f'test_{safe_precip_name}.nc')
+            self.dlg.Log("Writing test output to file %s..." % filepath)
+            self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_pred, filepath)
+
+        # After the loop, concatenate all values and calculate metrics once
         model_name = self.dlg.comboBox_InputModel.currentText()
-        processed_result = self.preprocess_data_classifier(bands, surfPrecip, long, lat, model_name,
-                                                           normalize=True, under_sample=False)
-        if processed_result[0] is None: return
-        bands, surfPrecip, valid_long, valid_lat = processed_result
+        y_true_global = np.concatenate(all_y_true)
+        y_pred_global = np.concatenate(all_y_pred)
 
-        y_pred = self.model.predict(bands)
-        self.dlg.Log("Model evaluation:")
-        self.dlg.Log(classification_report(surfPrecip, y_pred, zero_division=0))
-        self.dlg.Log("Confusion Matrix:")
-        self.dlg.Log(str(confusion_matrix(surfPrecip, y_pred)))
+        if self.get_model_type(model_name) == "Classification":
+            self.dlg.Log("Global model evaluation:")
+            self.dlg.Log(classification_report(y_true_global, y_pred_global))
 
-        # --- NEW: Clear regression metrics for classifiers ---
-        self.dlg.Log("Métricas de regressão (Bias, MSE, etc.) não são aplicáveis para modelos de classificação.")
-        for i in range(self.dlg.tableWidget_ModelMetrics.columnCount()):
-            self.dlg.tableWidget_ModelMetrics.setItem(0, i, QTableWidgetItem(""))
+            # Confusion matrix
+            cm = confusion_matrix(y_true_global, y_pred_global)
+            self.dlg.Log("Global Confusion Matrix:")
+            self.dlg.Log(cm)
 
-        long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
-        filepath = self.dlg.fileWidget_TestOutput.lineEdit().value()
-        if not filepath:
-            filepath = os.path.join(self.get_project_or_working_directory(), 'Output', 'test_output_classifier.nc')
-        self.export_to_netCDF4_file(len(long_width), len(lat_height), valid_long, valid_lat, y_pred, filepath)
+            # Add a table to the plugin to display the confusion matrix
 
+        elif self.get_model_type(model_name) == "Regression":
+            bias, mse, mae, smape_value, lin_corr = self.get_model_metrics(y_true_global, y_pred_global)
+
+            # Update the table with model metrics
+            self.dlg.tableWidget_ModelMetrics.setItem(0, 0, QTableWidgetItem(f"{bias:.4f}"))
+            self.dlg.tableWidget_ModelMetrics.setItem(0, 1, QTableWidgetItem(f"{mse:.4f}"))
+            self.dlg.tableWidget_ModelMetrics.setItem(0, 2, QTableWidgetItem(f"{mae:.4f}"))
+            self.dlg.tableWidget_ModelMetrics.setItem(0, 3, QTableWidgetItem(f"{smape_value:.4f}"))
+            self.dlg.tableWidget_ModelMetrics.setItem(0, 4, QTableWidgetItem(f"{lin_corr:.4f}"))
+
+        # Log the testing completion
         self.dlg.progressBar_RunTest.setValue(100)
-        self.dlg.Log("Classifier model testing completed.")
-
-    def test_model_regressor(self):
-        """Test the regression model."""
-        self.dlg.Log("Testing regression model (MLP Regressor)...")
-        checkedLayers_GMI = self.dlg.comboBox_TestGMI.checkedItems()
-        selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
-        checkedLayers_SurfPrecip = self.dlg.comboBox_TestSurfPrecip.checkedItems()
-        selectedLayer_SurfPrecip = self.get_layer_by_name(checkedLayers_SurfPrecip[0])
-
-        bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-        if bands is None: return
-
-        surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-        if surfPrecip is None: return
-
-        processed_result = self.preprocess_data_regressor(bands, surfPrecip, long, lat, normalize=True)
-        if processed_result[0] is None: return
-        bands, surfPrecip, valid_long, valid_lat = processed_result
-
-        y_pred = self.model.predict(bands)
-        self.dlg.Log("Model evaluation (Metrics):")
-
-        long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
-        filepath = self.dlg.fileWidget_TestOutput.lineEdit().value()
-        if not filepath:
-            filepath = os.path.join(self.get_project_or_working_directory(), 'Output', 'test_output_regressor.nc')
-        self.export_to_netCDF4_file(len(long_width), len(lat_height), valid_long, valid_lat, y_pred, filepath)
-
-        y_true = surfPrecip.flatten()
-        bias, mse, mae, smape_value, lin_corr = self.get_model_metrics(y_true, y_pred)
-        self.dlg.Log(
-            f"Bias: {bias:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}, SMAPE: {smape_value:.4f}, Corr: {lin_corr:.4f}")
-
-        self.dlg.tableWidget_ModelMetrics.setItem(0, 0, QTableWidgetItem(f"{bias:.4f}"))
-        self.dlg.tableWidget_ModelMetrics.setItem(0, 1, QTableWidgetItem(f"{mse:.4f}"))
-        self.dlg.tableWidget_ModelMetrics.setItem(0, 2, QTableWidgetItem(f"{mae:.4f}"))
-        self.dlg.tableWidget_ModelMetrics.setItem(0, 3, QTableWidgetItem(f"{smape_value:.4f}"))
-        self.dlg.tableWidget_ModelMetrics.setItem(0, 4, QTableWidgetItem(f"{lin_corr:.4f}"))
-
-        self.dlg.progressBar_RunTest.setValue(100)
-        self.dlg.Log("Regressor model testing completed.")
+        self.dlg.Log("Model testing completed.")
 
     def predict_model(self):
-        """Predict surface precipitation with the trained model."""
+        """Test the model with the selected GMI data."""
+        # This method is implemented to train the model
         self.dlg.Log("Predicting model with selected GMI data...")
-        if not self.model:
-            self.dlg.Log("Error: Model is not trained. Please train a model first.")
-            return
 
+        # Fetch the currently loaded layers
+        layers = QgsProject.instance().layerTreeRoot().children()
+
+        # write feature attributes
         checkedLayers_GMI = self.dlg.comboBox_ForecastGMI.checkedItems()
         selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
-
         bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-        if bands is None: return
 
-        bands, valid_long, valid_lat = self.preprocess_GMI_data(bands, long, lat, normalize=True)
+        # Preprocess the data
+        bands, long, lat = self.preprocess_GMI_data(bands, long, lat, normalize=True)
 
+        # Evaluate the model
         y_pred = self.model.predict(bands)
 
+        # Export the results to a netCDF4 file and load it as a raster layer
         long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
         filepath = self.dlg.fileWidget_ForecastOutput.lineEdit().value()
         if not filepath:
-            filepath = os.path.join(self.get_project_or_working_directory(), 'Output', 'forecast_output.nc')
-        self.export_to_netCDF4_file(len(long_width), len(lat_height), valid_long, valid_lat, y_pred, filepath)
+            filepath = os.path.join(os.getcwd(), 'Temp', 'forecast_output.nc')
+        self.export_to_netCDF4_file(len(long_width), len(lat_height), long, lat, y_pred, filepath)
 
+        # Log the prediction completion
         self.dlg.progressBar_Predict.setValue(100)
         self.dlg.Log("Model prediction completed.")
 
+    def on_svm_kernel_gamma_changed(self, value):
+        """Handle changes in the SVM kernel gamma parameter."""
+        self.model_params_layout.removeRow(5)
+        if value == "float":
+            self.SVM_gamma_value_param = QDoubleSpinBox()
+            self.SVM_gamma_value_param.setDecimals(6)
+            self.SVM_gamma_value_param.setRange(0.000001, 10000.0)
+            self.SVM_gamma_value_param.setSingleStep(0.1)
+            self.SVM_gamma_value_param.setValue(0.5)
+            self.model_params_layout.insertRow(5, 'Gamma value:', self.SVM_gamma_value_param)
+
+    def on_svm_kernel_changed(self, value):
+        """Handle changes in the SVM kernel parameter."""
+        self.model_params_layout.removeRow(5)
+        self.model_params_layout.removeRow(4)
+        self.model_params_layout.removeRow(3)
+        if value == "poly":
+            self.SVM_degree_param = QSpinBox()
+            self.SVM_degree_param.setRange(0, 50)
+            self.SVM_degree_param.setValue(3)
+            self.model_params_layout.insertRow(3, 'Degree:', self.SVM_degree_param)
+        if value == "rbf" or value == "poly" or value == "sigmoid":
+            self.SVM_gamma_param = QComboBox()
+            self.SVM_gamma_param.addItems(["scale", "auto", "float"])
+            self.SVM_gamma_param.setCurrentText("scale")
+            self.SVM_gamma_param.currentTextChanged.connect(self.on_svm_kernel_gamma_changed)
+            self.model_params_layout.insertRow(4, 'Gamma:', self.SVM_gamma_param)
+
+    def on_model_changed(self, cur_model):
+        """Handle changes in the model selection."""
+        self.dlg.formLayout_Model.removeRow(self.model_params_layout)
+
+        self.model_params_layout = QFormLayout()
+
+        if cur_model == "MLP Regressor":
+            activation_functions = QComboBox()
+            activation_functions.addItems(["identity", "logistic", "tanh", "relu"])
+            activation_functions.setCurrentText("relu")
+            hid_layers_neurons = QLineEdit()
+            hid_layers_neurons.setText('20;20')
+            hid_layers_neurons.setValidator(QRegExpValidator(QRegExp(r'^\d+(;\d+)*$')))
+            hid_layers_neurons.setToolTip("Enter hidden layer sizes as 'neurons1;neurons2;...'")
+            learning_rate = QDoubleSpinBox()
+            learning_rate.setDecimals(6)
+            learning_rate.setRange(0.000001, 10.0)
+            learning_rate.setSingleStep(0.001)
+            learning_rate.setValue(0.001)
+            random_seed = QSpinBox()
+            random_seed.setRange(0, 1000000)
+            random_seed.setValue(8)
+            self.model_params_layout.insertRow(0, 'Activation Function:', activation_functions)
+            self.model_params_layout.insertRow(1, 'Hidden Layers Neurons:', hid_layers_neurons)
+            self.model_params_layout.insertRow(2, 'Learning Rate:', learning_rate)
+            self.model_params_layout.insertRow(3, 'Random Seed:', random_seed)
+
+        elif cur_model == "SVM":
+            kernel = QComboBox()
+            kernel.addItems(["rbf", "linear", "poly", "sigmoid"])
+            kernel.currentTextChanged.connect(self.on_svm_kernel_changed)
+            kernel.setCurrentText("rbf")
+            self.on_svm_kernel_changed("rbf")
+            C_param = QDoubleSpinBox()
+            C_param.setDecimals(6)
+            C_param.setRange(0.000001, 100000.0)
+            C_param.setSingleStep(1.0)
+            C_param.setValue(100.0)
+            random_seed = QSpinBox()
+            random_seed.setRange(0, 1000000)
+            random_seed.setValue(8)
+            self.model_params_layout.insertRow(0, 'Kernel:', kernel)
+            self.model_params_layout.insertRow(1, 'C:', C_param)
+            self.model_params_layout.insertRow(2, 'Random Seed:', random_seed)
+
+        elif cur_model == "Random Forest":
+            n_estimators = QSpinBox()
+            n_estimators.setRange(1, 1000000)
+            n_estimators.setSingleStep(1)
+            n_estimators.setValue(100)
+            criterion = QComboBox()
+            criterion.addItems(["gini", "entropy", "log_loss"])
+            criterion.setCurrentText("entropy")
+            min_samples_split = QSpinBox()
+            min_samples_split.setRange(0, 1000000)
+            min_samples_split.setSingleStep(1)
+            min_samples_split.setValue(10)
+            min_impurity_decrease = QDoubleSpinBox()
+            min_impurity_decrease.setDecimals(15)
+            min_impurity_decrease.setRange(0.0, 100000.0)
+            min_impurity_decrease.setSingleStep(0.000001)
+            min_impurity_decrease.setValue(1e-6)
+            random_seed = QSpinBox()
+            random_seed.setRange(0, 1000000)
+            random_seed.setValue(8)
+            self.model_params_layout.insertRow(0, 'Number of Trees:', n_estimators)
+            self.model_params_layout.insertRow(1, 'Criterion:', criterion)
+            self.model_params_layout.insertRow(2, 'Min Samples Split:', min_samples_split)
+            self.model_params_layout.insertRow(3, 'Min Impurity Decrease:', min_impurity_decrease)
+            self.model_params_layout.insertRow(4, 'Random Seed:', random_seed)
+
+            self.dlg.Log(self.model_params_layout.itemAt(0, 1).widget().value())
+            self.dlg.Log(self.model_params_layout.itemAt(1, 1).widget().currentText())
+            self.dlg.Log(self.model_params_layout.itemAt(2, 1).widget().value())
+            self.dlg.Log(self.model_params_layout.itemAt(3, 1).widget().value())
+            self.dlg.Log(self.model_params_layout.itemAt(4, 1).widget().value())
+
+        elif cur_model == "Decision Tree":
+            criterion = QComboBox()
+            criterion.addItems(["gini", "entropy", "log_loss"])
+            criterion.setCurrentText("entropy")
+            splitter = QComboBox()
+            splitter.addItems(["best", "random"])
+            splitter.setCurrentText("best")
+            min_samples_split = QSpinBox()
+            min_samples_split.setRange(0, 1000000)
+            min_samples_split.setSingleStep(1)
+            min_samples_split.setValue(10)
+            min_impurity_decrease = QDoubleSpinBox()
+            min_impurity_decrease.setDecimals(15)
+            min_impurity_decrease.setRange(0.0, 100000.0)
+            min_impurity_decrease.setSingleStep(0.000001)
+            min_impurity_decrease.setValue(1e-6)
+            random_seed = QSpinBox()
+            random_seed.setRange(0, 1000000)
+            random_seed.setValue(8)
+            self.model_params_layout.insertRow(0, 'Criterion:', criterion)
+            self.model_params_layout.insertRow(1, 'Splitter:', splitter)
+            self.model_params_layout.insertRow(2, 'Min Samples Split:', min_samples_split)
+            self.model_params_layout.insertRow(3, 'Min Impurity Decrease:', min_impurity_decrease)
+            self.model_params_layout.insertRow(4, 'Random Seed:', random_seed)
+
+            self.dlg.Log(self.model_params_layout.itemAt(0, 1).widget().currentText())
+            self.dlg.Log(self.model_params_layout.itemAt(1, 1).widget().currentText())
+            self.dlg.Log(self.model_params_layout.itemAt(2, 1).widget().value())
+            self.dlg.Log(self.model_params_layout.itemAt(3, 1).widget().value())
+            self.dlg.Log(self.model_params_layout.itemAt(4, 1).widget().value())
+
+        elif cur_model == "AdaBoost":
+            estimator = QComboBox()
+            estimator.addItems(["Decision Tree"])
+            estimator.setCurrentText("Decision Tree")
+            n_estimators = QSpinBox()
+            n_estimators.setRange(1, 1000000)
+            n_estimators.setSingleStep(1)
+            n_estimators.setValue(100)
+            learning_rate = QDoubleSpinBox()
+            learning_rate.setDecimals(6)
+            learning_rate.setRange(0.000001, 10.0)
+            learning_rate.setSingleStep(0.001)
+            learning_rate.setValue(0.001)
+            random_seed = QSpinBox()
+            random_seed.setRange(0, 1000000)
+            random_seed.setValue(8)
+            self.model_params_layout.insertRow(0, 'Estimator:', estimator)
+            self.model_params_layout.insertRow(1, 'Max Number of Estimators:', n_estimators)
+            self.model_params_layout.insertRow(2, 'Learning Rate:', learning_rate)
+            self.model_params_layout.insertRow(3, 'Random Seed:', random_seed)
+
+        self.dlg.formLayout_Model.insertRow(3, 'Model Parameters:' ,self.model_params_layout)
+
+        return
+
     def run(self):
         """Run method that performs all the real work"""
-        if self.first_start:
+
+        # Create the dialog with elements (after translation) and keep reference
+        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
+        if self.first_start == True:
             self.first_start = False
             self.dlg = GISPrecipDialog()
             self.dlg.button_TrainModel.clicked.connect(self.train_model)
+            # self.dlg.button_ExportModel.clicked.connect(self.train_model)
             self.dlg.button_RunTest.clicked.connect(self.test_model)
             self.dlg.button_Predict.clicked.connect(self.predict_model)
+            self.dlg.comboBox_InputModel.currentTextChanged.connect(self.on_model_changed)
 
         self.dlg.Log("Plugin initialized.")
 
-        try:
-            os.chdir(os.path.dirname(os.path.abspath(__file__)))
-            self.dlg.Log(f"Current directory: {os.getcwd()}")
-        except Exception as e:
-            self.dlg.Log(f"Could not change directory: {e}")
+        os.chdir(os.path.dirname(os.path.abspath(__file__)))
+        self.dlg.Log(os.getcwd())
+        # self.write_to_netCDF4_file()
 
-        layers = QgsProject.instance().mapLayers().values()
-        raster_layers = [layer.name() for layer in layers if isinstance(layer, QgsRasterLayer)]
+        # Fetch all layers, including those inside groups
+        all_layers = self.get_all_layers_with_children(QgsProject.instance().layerTreeRoot().children())
 
+        # Clear the contents of the comboBox and lineEdit from previous runs
         self.dlg.comboBox_InputGMI.clear()
         self.dlg.comboBox_InputSurfPrecip.clear()
-        self.dlg.comboBox_TestGMI.clear()
-        self.dlg.comboBox_TestSurfPrecip.clear()
-        self.dlg.comboBox_ForecastGMI.clear()
+        # self.dlg.lineEdit.clear()
+        # Populate the comboBox with names of all the loaded layers
+        self.dlg.comboBox_InputGMI.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_TestGMI.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_InputSurfPrecip.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_TestSurfPrecip.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_ForecastGMI.addItems([layer.name() for layer in all_layers])
 
-        self.dlg.comboBox_InputGMI.addItems(raster_layers)
-        self.dlg.comboBox_TestGMI.addItems(raster_layers)
-        self.dlg.comboBox_InputSurfPrecip.addItems(raster_layers)
-        self.dlg.comboBox_TestSurfPrecip.addItems(raster_layers)
-        self.dlg.comboBox_ForecastGMI.addItems(raster_layers)
+        # Add the model options to the comboBox
+        self.dlg.comboBox_InputModel.addItems(["MLP Regressor", "SVM", "Random Forest", "Decision Tree", "AdaBoost"])
 
-        self.dlg.comboBox_InputModel.clear()
-        self.dlg.comboBox_InputModel.addItems(["SVM", "Random Forest", "Decision Tree", "AdaBoost", "MLP Regressor"])
-
+        # Set the file dialogs
+        # self.dlg.fileWidget_TestOutput.setFilter("All files (*.*);;JPEG (*.jpg *.jpeg);;TIFF (*.tif);;netCFD(*.nc)")
         directory = self.get_project_or_working_directory()
-        output_dir = os.path.join(directory, 'Output')
-        self.dlg.fileWidget_TestOutput.lineEdit().setValue(os.path.join(output_dir, 'test_output.nc'))
-        self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(output_dir, 'error_output.nc'))
-        self.dlg.fileWidget_ForecastOutput.lineEdit().setValue(os.path.join(output_dir, 'forecast_output.nc'))
+        self.dlg.fileWidget_TestOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
+        self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(directory, 'Output', 'error_output.nc'))
+        self.dlg.fileWidget_ForecastOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
 
+        # # write feature attributes
+        # selectedLayerIndex = self.dlg.comboBox_InputGMI.currentIndex()
+        # selectedLayer = layers[selectedLayerIndex].layer()
+        # self.dlg.Log(selectedLayer.bandCount())
+        # mask = True
+        # self.dlg.Log(selectedLayer.as_numpy(mask, [1]))
+
+        # show the dialog
         self.dlg.show()
+        # Run the dialog event loop
         result = self.dlg.exec_()
+        # See if OK was pressed
         if result:
+            # Do something useful here - delete the line containing pass and
+            # substitute with your code.
             pass
