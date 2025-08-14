@@ -102,16 +102,6 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QCheckBox" name="checkBox_Interpolate">
-                   <property name="text">
-                    <string>Interpolate</string>
-                   </property>
-                   <property name="checked">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
                   <widget class="QCheckBox" name="checkBox_Undersampling">
                    <property name="text">
                     <string>Undersampling</string>
@@ -649,7 +639,7 @@
                   <string>lhjlhljhlhlh</string>
                  </property>
                  <property name="text">
-                  <string>Forecast Output</string>
+                  <string>Prediction Output</string>
                  </property>
                 </widget>
                </item>

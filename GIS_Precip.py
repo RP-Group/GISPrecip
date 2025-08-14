@@ -41,6 +41,8 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, confusion_matrix, mean_squared_error, mean_absolute_error
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
+
 from scipy.stats import pearsonr
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -322,12 +324,13 @@ class GISPrecip:
             return (surf_precip_data > 0.1).astype(int)  # 0 = no rain, 1 = rain
         else:
             # TODO: QGIS maps the data to colors based on min and max values, not based on the classes defined here
-            self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy)")
+            self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy, 4: Violent)")
             y = surf_precip_data.flatten()
             cat = np.zeros_like(y, dtype=int)
-            cat[(y > 0.0) & (y <= 1.0)] = 1  # Leve
-            cat[(y > 1.0) & (y <= 3.0)] = 2  # Moderada
-            cat[y > 3.0] = 3  # Pesada
+            cat[(y > 0.0) & (y < 2.5)] = 1  # Leve
+            cat[(y >= 2.5) & (y < 10)] = 2  # Moderada
+            cat[(y >= 10) & (y < 50)] = 3  # Pesada
+            cat[(y >= 50)] = 4 # Violenta
             return cat
 
     def preprocess_data(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
@@ -425,7 +428,7 @@ class GISPrecip:
         else:
             return "None"
 
-    def get_model_metrics(self, y_true, y_pred):
+    def get_model_metrics_reg(self, y_true, y_pred):
         """Calculate model metrics."""
         self.dlg.Log("Calculating model metrics...")
 
@@ -442,6 +445,7 @@ class GISPrecip:
 
         self.dlg.Log("Model metrics calculated.")
         return bias, mse, mae, smape_value, lin_corr
+
 
     def export_to_netCDF4_file(self, width, height, long, lat, mask, data, output_filepath):
 
@@ -529,6 +533,20 @@ class GISPrecip:
             bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
             surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
 
+            # ====== FILTRO DE QUALIDADE ======
+            # surfPrecip, rqi, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
+            # min_rqi_threshold = 0.0
+            # mask_valid = (rqi >= min_rqi_threshold)
+
+            # Aplica máscara: NaN para valores ruins
+            # surfPrecip = np.where(mask_valid, surfPrecip, np.nan)
+
+            # ====== TRATAMENTO DE NAN ======
+            # nan_fill_value = -1.5
+            # bands = np.where(np.isnan(bands), nan_fill_value, bands)
+            # surfPrecip = np.where(np.isnan(surfPrecip), nan_fill_value, surfPrecip)
+            # ===============================
+
             gmi_data_list.append(bands)
             surf_precip_list.append(surfPrecip)
             long_list.append(long)
@@ -546,8 +564,15 @@ class GISPrecip:
 
         # Create and train the SVM model
         model_name = self.dlg.comboBox_InputModel.currentText()
-        normalizer = True
-        scaler_step = ('scaler', StandardScaler()) if normalizer else None
+        if self.dlg.checkBox_Normalize.isChecked():
+            if model_name == "MLP Regressor":
+                from sklearn.preprocessing import MinMaxScaler
+                scaler_step = ('scaler', MinMaxScaler())
+            else:
+                from sklearn.preprocessing import StandardScaler
+                scaler_step = ('scaler', StandardScaler())
+        else:
+            scaler_step = None
         # scaler_step = ('scaler', RobustScaler()) if normalizer else None
         model_step = None
         if model_name == "MLP Regressor":
@@ -664,8 +689,19 @@ class GISPrecip:
         y_true_global = np.concatenate(all_y_true)
         y_pred_global = np.concatenate(all_y_pred)
 
+        classes = [1, 2, 3, 4]
         if self.get_model_type(model_name) == "Classification":
             self.dlg.Log("Global model evaluation:")
+            precision_per_class = precision_score(y_true_global, y_pred_global, average=None, labels=classes)
+            recall_per_class = recall_score(y_true_global, y_pred_global, average=None, labels=classes)
+            f1_per_class = f1_score(y_true_global, y_pred_global, average=None, labels=classes)
+
+            for i, cls in enumerate(classes):
+                self.dlg.tableWidget.setItem(i, 0, QTableWidgetItem(f"{precision_per_class[i]:.4f}"))
+                self.dlg.tableWidget.setItem(i, 1, QTableWidgetItem(f"{recall_per_class[i]:.4f}"))
+                self.dlg.tableWidget.setItem(i, 2, QTableWidgetItem(f"{f1_per_class[i]:.4f}"))
+
+
             self.dlg.Log(classification_report(y_true_global, y_pred_global))
 
             # Confusion matrix
@@ -676,7 +712,7 @@ class GISPrecip:
             # Add a table to the plugin to display the confusion matrix
 
         elif self.get_model_type(model_name) == "Regression":
-            bias, mse, mae, smape_value, lin_corr = self.get_model_metrics(y_true_global, y_pred_global)
+            bias, mse, mae, smape_value, lin_corr = self.get_model_metrics_reg(y_true_global, y_pred_global)
 
             # Update the table with model metrics
             self.dlg.tableWidget_ModelMetrics.setItem(0, 0, QTableWidgetItem(f"{bias:.4f}"))
@@ -712,7 +748,7 @@ class GISPrecip:
         long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
         filepath = self.dlg.fileWidget_ForecastOutput.lineEdit().value()
         if not filepath:
-            filepath = os.path.join(os.getcwd(), 'Temp', 'forecast_output.nc')
+            filepath = os.path.join(os.getcwd(), 'Temp', 'prediction_output.nc')
         self.export_to_netCDF4_file(len(long_width), len(lat_height), long, lat, y_pred, filepath)
 
         # Log the prediction completion
@@ -915,6 +951,7 @@ class GISPrecip:
         self.dlg.comboBox_ForecastGMI.addItems([layer.name() for layer in all_layers])
 
         # Add the model options to the comboBox
+        self.dlg.comboBox_InputModel.clear()
         self.dlg.comboBox_InputModel.addItems(["MLP Regressor", "SVM", "Random Forest", "Decision Tree", "AdaBoost"])
 
         # Set the file dialogs
