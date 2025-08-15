@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>607</width>
-    <height>616</height>
+    <height>675</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -43,7 +43,7 @@
               <x>0</x>
               <y>0</y>
               <width>561</width>
-              <height>369</height>
+              <height>428</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -193,6 +193,12 @@
         <layout class="QVBoxLayout" name="verticalLayout_15">
          <item>
           <widget class="QScrollArea" name="scrollArea_2">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>155</height>
+            </size>
+           </property>
            <property name="widgetResizable">
             <bool>true</bool>
            </property>
@@ -201,8 +207,8 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>544</width>
-              <height>145</height>
+              <width>561</width>
+              <height>153</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -309,10 +315,22 @@
             <bool>true</bool>
            </property>
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>40</height>
+            </size>
            </property>
            <property name="sizeAdjustPolicy">
             <enum>QAbstractScrollArea::AdjustToContents</enum>
@@ -379,17 +397,23 @@
           </widget>
          </item>
          <item>
-          <widget class="QTableWidget" name="tableWidget">
+          <widget class="QTableWidget" name="tableWidget_MetricsClassification">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>205</height>
+            </size>
+           </property>
            <property name="maximumSize">
             <size>
              <width>16777215</width>
-             <height>100</height>
+             <height>16777215</height>
             </size>
            </property>
            <attribute name="horizontalHeaderMinimumSectionSize">
@@ -414,12 +438,12 @@
            </row>
            <row>
             <property name="text">
-             <string>Moderate Rain</string>
+             <string>Soft Rain</string>
             </property>
            </row>
            <row>
             <property name="text">
-             <string>Soft Rain</string>
+             <string>Moderate Rain</string>
             </property>
            </row>
            <row>
@@ -429,7 +453,22 @@
            </row>
            <row>
             <property name="text">
+             <string>Violent Rain</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
              <string>Total</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Macro Avg</string>
+            </property>
+           </row>
+           <row>
+            <property name="text">
+             <string>Weighted Avg</string>
             </property>
            </row>
            <column>
@@ -457,22 +496,12 @@
              <string>Accurary</string>
             </property>
            </column>
-           <column>
-            <property name="text">
-             <string>Macro Avg</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>Weighted Avg</string>
-            </property>
-           </column>
           </widget>
          </item>
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_5">
            <item>
-            <widget class="QLabel" name="label_2">
+            <widget class="QLabel" name="label_ConfusionMatrixPredicted">
              <property name="autoFillBackground">
               <bool>true</bool>
              </property>
@@ -487,7 +516,7 @@
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout">
              <item>
-              <widget class="QLabel" name="label">
+              <widget class="QLabel" name="label_ConfusionMatrixActual">
                <property name="autoFillBackground">
                 <bool>true</bool>
                </property>
@@ -500,24 +529,30 @@
               </widget>
              </item>
              <item>
-              <widget class="QTableWidget" name="tableWidget_ModelMetricsClassification">
+              <widget class="QTableWidget" name="tableWidget_ConfusionMatrixClassification">
                <property name="sizePolicy">
                 <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
                </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>120</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>16777215</width>
-                 <height>140</height>
+                 <height>16777215</height>
                 </size>
                </property>
                <property name="rowCount">
-                <number>4</number>
+                <number>5</number>
                </property>
                <property name="columnCount">
-                <number>4</number>
+                <number>5</number>
                </property>
                <attribute name="horizontalHeaderMinimumSectionSize">
                 <number>20</number>
@@ -551,6 +586,11 @@
                  <string>Heavy Rain</string>
                 </property>
                </row>
+               <row>
+                <property name="text">
+                 <string>Violent Rain</string>
+                </property>
+               </row>
                <column>
                 <property name="text">
                  <string>No Rain</string>
@@ -568,7 +608,12 @@
                </column>
                <column>
                 <property name="text">
-                 <string>Heavy Rain</string>
+                 <string>Violent Rain</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>New Column</string>
                 </property>
                </column>
               </widget>
@@ -608,7 +653,7 @@
               <x>0</x>
               <y>0</y>
               <width>561</width>
-              <height>369</height>
+              <height>428</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -733,7 +778,7 @@
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>16777215</height>
+       <height>150</height>
       </size>
      </property>
      <property name="layoutDirection">

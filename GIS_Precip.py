@@ -21,13 +21,16 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QRegExp
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QRegExp, QThread, QObject, pyqtSignal, pyqtSlot
 from qgis.PyQt.QtGui import QIcon, QRegExpValidator
 from qgis.PyQt.QtWidgets import QAction, QFileDialog, QTableWidgetItem, QLabel, QComboBox, QFormLayout, QLineEdit, QSpinBox, QDoubleSpinBox
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis.core import QgsSingleBandPseudoColorRenderer, QgsColorRampShader, QgsRasterShader, QgsStyle
 from qgis.gui import QgsSingleBandPseudoColorRendererWidget
 
+import traceback
+import inspect
+from collections import deque
 import numpy as np
 
 from netCDF4 import Dataset
@@ -57,6 +60,96 @@ import os.path
 from pathlib import Path
 import re
 
+class TaskQueue:
+    def __init__(self, dlg):
+        self.dlg = dlg
+        self.queue = deque()
+        self._bg_thread = None
+        self._bg_worker = None
+
+    def add_task(self, fn, *fn_args, on_finished=None, **fn_kwargs):
+        """
+        Add a task to the queue.
+        fn: function to run in background
+        on_finished: called in main thread with fn's return values
+        """
+        self.queue.append((fn, fn_args, fn_kwargs, on_finished))
+        if not self.is_running():
+            self._start_next_task()
+
+    def is_running(self):
+        return self._bg_thread is not None and self._bg_thread.isRunning()
+
+    def _start_next_task(self):
+        if not self.queue:
+            return  # nothing left to run
+
+        fn, fn_args, fn_kwargs, on_finished = self.queue.popleft()
+
+        class Worker(QObject):
+            finished = pyqtSignal(object)  # carries result (can be tuple)
+            log = pyqtSignal(str)
+
+            def __init__(self, fn, args, kwargs):
+                super().__init__()
+                self.fn = fn
+                self.args = args
+                self.kwargs = kwargs
+
+            @pyqtSlot()
+            def run(self):
+                try:
+                    self.log.emit("Thread started: running function...")
+                    result = self.fn(*self.args, **self.kwargs)
+                    self.log.emit("Thread finished: function completed.")
+                except Exception as e:
+                    import traceback
+                    tb = traceback.format_exc()
+                    self.log.emit(f"Exception in thread: {e}\n{tb}")
+                    result = None
+                finally:
+                    self.finished.emit(result)
+
+        # Keep objects alive: store as attributes AND (optionally) parent the thread.
+        thread = QThread(self.dlg) # parent helps keep it alive
+        worker = Worker(fn, fn_args, fn_kwargs)
+        worker.moveToThread(thread)
+
+        # Connections
+        thread.started.connect(worker.run)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        # UI-thread callbacks
+        worker.log.connect(self.dlg.Log) # safe: runs in UI thread
+
+        def _wrapped_on_finished(result):
+            if on_finished:
+                if on_finished:
+                    sig = inspect.signature(on_finished)
+                    if len(sig.parameters) == 0:
+                        on_finished()
+                    else:
+                        if isinstance(result, (tuple, list)):
+                            on_finished(*result)
+                        else:
+                            on_finished(result)
+            # Clear current job
+            self._bg_thread = None # clear ref
+            self._bg_worker = None # clear ref
+            # Start next job
+            self._start_next_task()
+
+        worker.finished.connect(_wrapped_on_finished)
+
+        # Helpful debug to confirm the signal path
+        # thread.started.connect(lambda: self.dlg.Log("QThread.started() emitted"))
+
+        # Start and keep references alive
+        self._bg_thread = thread
+        self._bg_worker = worker
+        thread.start()
 
 class GISPrecip:
     """QGIS Plugin Implementation."""
@@ -99,6 +192,11 @@ class GISPrecip:
         self.SVM_degree_param = None
         self.SVM_gamma_param = None
         self.SVM_gamma_value_param = None
+
+        # Thread stuff
+        self.is_train_running = False
+        self.is_test_running = False
+        self.task_queue = None
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -217,6 +315,7 @@ class GISPrecip:
         # if os.path.exists(temp_dir) and os.path.isdir(temp_dir):
         #     import shutil
         #     shutil.rmtree(temp_dir)
+
 
     def get_layer_by_name(self, layer_name, idx=0):
         """Get a layer by its name."""
@@ -513,6 +612,13 @@ class GISPrecip:
     def train_model(self):
         """Train the model with the selected GMI and Surface Precipitation data."""
         # This method is implemented to train the model
+
+        # Early out if already training a model
+        if self.is_train_running:
+            self.dlg.Log("Model training is already in progress.")
+            return
+        self.is_train_running = True
+
         self.dlg.Log("Training model with selected GMI and Surface Precipitation data...")
 
         self.dlg.progressBar_TrainModel.setValue(0)
@@ -628,15 +734,31 @@ class GISPrecip:
                 learning_rate=self.model_params_layout.itemAt(2, 1).widget().value(),
                 random_state=self.model_params_layout.itemAt(3, 1).widget().value()))
         self.model = Pipeline([scaler_step, model_step])
-        self.model.fit(bands, surfPrecip)
+        # Run model training asynchronously to avoid blocking the UI
 
-        # Log the training completion
-        self.dlg.progressBar_TrainModel.setValue(100)
-        self.dlg.Log("Model training completed.")
+        def train_model_fn(bands, surfPrecip):
+            self.model.fit(bands, surfPrecip)
+
+        def on_training_finished():
+            self.dlg.progressBar_TrainModel.setValue(100)
+            self.dlg.Log("Model training completed.")
+            self.is_train_running = False
+
+        self.dlg.progressBar_TrainModel.setValue(10)
+        self.dlg.Log("Training model asynchronously...")
+
+        self.task_queue.add_task(train_model_fn, bands, surfPrecip, on_finished=on_training_finished)
 
     def test_model(self):
         """Test the model with the selected GMI and Surface Precipitation data."""
-        # This method is implemented to train the model
+        # This method is implemented to test the model
+
+        # Early out if already testing a model
+        if self.is_test_running:
+            self.dlg.Log("Model testing is already in progress.")
+            return
+        self.is_test_running = True
+
         self.dlg.Log("Testing model with selected GMI and Surface Precipitation data...")
 
         self.dlg.progressBar_RunTest.setValue(0)
@@ -653,7 +775,11 @@ class GISPrecip:
         all_y_pred = []
 
         # Process each GMI and surface precipitation layer as a pair
-        for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
+        total_tests = len(checkedLayers_GMI)
+        for idx, (gmi_name, precip_name) in enumerate(zip(checkedLayers_GMI, checkedLayers_SurfPrecip), start=1):
+            # Update progress bar percentage for each test
+            percent_complete = int((idx / total_tests) * 100) if total_tests > 0 else 0
+    
             selectedLayer_GMI = self.get_layer_by_name(gmi_name)
             bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
             selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
@@ -662,68 +788,129 @@ class GISPrecip:
             # Preprocess the data
             bands, surfPrecip, long, lat, mask = self.preprocess_data_test(bands, surfPrecip, long, lat, under_sample=False)
 
-            # Evaluate the model
-            y_pred = self.model.predict(bands)
+            y_pred = None  # Initialize y_pred
+            def test_model_fn(bands, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete):
+                # Evaluate the model
+                y_pred = self.model.predict(bands)
+                return y_pred, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete
 
-            # Manual clip for regression since scikit-learn does not allow to change the output activation function
+            def on_testing_finished(y_pred, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete):
+                # Manual clip for regression since scikit-learn does not allow to change the output activation function
+                model_name = self.dlg.comboBox_InputModel.currentText()
+                if self.get_model_type(model_name) == "Regression":
+                    y_pred = np.maximum(0, y_pred)
+
+                # Collect for global metrics
+                all_y_true.append(surfPrecip.flatten())
+                all_y_pred.append(y_pred.flatten())
+
+                # Export the results to a netCDF4 file and load it as a raster layer
+                long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
+                out_dir = self.dlg.fileWidget_TestOutput.lineEdit().value()
+                if not out_dir:
+                    out_dir = os.path.join(os.getcwd(), 'Temp')
+                safe_precip_name = re.sub(r'[^\w\-]', '_', precip_name)
+                filepath = os.path.join(out_dir, f'test_{safe_precip_name}.nc')
+                self.dlg.Log("Writing test output to file %s..." % filepath)
+                self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_pred, filepath)
+
+                self.dlg.progressBar_RunTest.setValue(percent_complete)
+
+
+            self.task_queue.add_task(test_model_fn, bands, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete, on_finished=on_testing_finished)
+
+        def test_dummy_fn():
+            pass
+
+        def on_dummy_finished():
+            # After the loop, concatenate all values and calculate metrics once
             model_name = self.dlg.comboBox_InputModel.currentText()
-            if self.get_model_type(model_name) == "Regression":
-                y_pred = np.maximum(0, y_pred)
+            y_true_global = np.concatenate(all_y_true)
+            y_pred_global = np.concatenate(all_y_pred)
 
-            # Collect for global metrics
-            all_y_true.append(surfPrecip.flatten())
-            all_y_pred.append(y_pred.flatten())
+            classes = [0, 1, 2, 3, 4]
+            if self.get_model_type(model_name) == "Classification":
+                # Hides the regression metrics table and show classification tables
+                self.display_metrics_tables(["Classification"])
 
-            # Export the results to a netCDF4 file and load it as a raster layer
-            long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
-            out_dir = self.dlg.fileWidget_TestOutput.lineEdit().value()
-            if not out_dir:
-                out_dir = os.path.join(os.getcwd(), 'Temp')
-            safe_precip_name = re.sub(r'[^\w\-]', '_', precip_name)
-            filepath = os.path.join(out_dir, f'test_{safe_precip_name}.nc')
-            self.dlg.Log("Writing test output to file %s..." % filepath)
-            self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_pred, filepath)
+                # self.dlg.Log("Global model evaluation:")
 
-        # After the loop, concatenate all values and calculate metrics once
-        model_name = self.dlg.comboBox_InputModel.currentText()
-        y_true_global = np.concatenate(all_y_true)
-        y_pred_global = np.concatenate(all_y_pred)
+                # self.dlg.Log(classification_report(y_true_global, y_pred_global))
 
-        classes = [1, 2, 3, 4]
-        if self.get_model_type(model_name) == "Classification":
-            self.dlg.Log("Global model evaluation:")
-            precision_per_class = precision_score(y_true_global, y_pred_global, average=None, labels=classes)
-            recall_per_class = recall_score(y_true_global, y_pred_global, average=None, labels=classes)
-            f1_per_class = f1_score(y_true_global, y_pred_global, average=None, labels=classes)
+                report = classification_report(y_true_global, y_pred_global, output_dict=True)
 
-            for i, cls in enumerate(classes):
-                self.dlg.tableWidget.setItem(i, 0, QTableWidgetItem(f"{precision_per_class[i]:.4f}"))
-                self.dlg.tableWidget.setItem(i, 1, QTableWidgetItem(f"{recall_per_class[i]:.4f}"))
-                self.dlg.tableWidget.setItem(i, 2, QTableWidgetItem(f"{f1_per_class[i]:.4f}"))
+                # Loop for each class in classes and get each metric this way
+                for i, cls in enumerate(classes):
+                    cls_str = str(cls)
+                    metrics = report.get(cls_str, {})
+                    for j, metric_name in enumerate(["precision", "recall", "f1-score", "support"]):
+                        value = metrics.get(metric_name, 0.0)
+                        if value is not None:
+                            if metric_name == "support":
+                                self.dlg.tableWidget_MetricsClassification.setItem(i, j, QTableWidgetItem(f"{int(value)}"))
+                            else:
+                                self.dlg.tableWidget_MetricsClassification.setItem(i, j, QTableWidgetItem(f"{value:.4f}"))
 
+                # Accuracy, macro avg, weighted avg
+                accuracy = report.get("accuracy", 0.0)
+                accuracy_support = sum(report[str(cls)]["support"] for cls in classes if str(cls) in report)
+                self.dlg.tableWidget_MetricsClassification.setItem(len(classes), 3, QTableWidgetItem(f"{int(accuracy_support)}"))
+                self.dlg.tableWidget_MetricsClassification.setItem(len(classes), 4, QTableWidgetItem(f"{accuracy:.4f}"))
+                macro_avg = report.get("macro avg", {})
+                for i, metric in enumerate(["precision", "recall", "f1-score", "support"]):
+                    value = macro_avg.get(metric, 0.0)
+                    if value is not None:
+                        if metric == "support":
+                            self.dlg.tableWidget_MetricsClassification.setItem(len(classes) + 1, i, QTableWidgetItem(f"{int(value)}"))
+                        else:
+                            self.dlg.tableWidget_MetricsClassification.setItem(len(classes) + 1, i, QTableWidgetItem(f"{value:.4f}"))
+                weighted_avg = report.get("weighted avg", {})
+                for i, metric in enumerate(["precision", "recall", "f1-score", "support"]):
+                    value = weighted_avg.get(metric, 0.0)
+                    if value is not None:
+                        if metric == "support":
+                            self.dlg.tableWidget_MetricsClassification.setItem(len(classes) + 2, i, QTableWidgetItem(f"{int(value)}"))
+                        else:
+                            self.dlg.tableWidget_MetricsClassification.setItem(len(classes) + 2, i, QTableWidgetItem(f"{value:.4f}"))
 
-            self.dlg.Log(classification_report(y_true_global, y_pred_global))
+                # Confusion matrix
+                cm = confusion_matrix(y_true_global, y_pred_global)
+                # Iterate through the confusion matrix
+                # Fill the confusion matrix table with actual values
+                for i, row in enumerate(cm):
+                    for j, value in enumerate(row):
+                        self.dlg.tableWidget_ConfusionMatrixClassification.setItem(i, j, QTableWidgetItem(f"{int(value)}"))
+                # Set all other elements to zero
+                row_count = self.dlg.tableWidget_ConfusionMatrixClassification.rowCount()
+                col_count = self.dlg.tableWidget_ConfusionMatrixClassification.columnCount()
+                for i in range(row_count):
+                    for j in range(col_count):
+                        if i >= len(cm) or j >= len(cm[i]):
+                            self.dlg.tableWidget_ConfusionMatrixClassification.setItem(i, j, QTableWidgetItem("0"))
 
-            # Confusion matrix
-            cm = confusion_matrix(y_true_global, y_pred_global)
-            self.dlg.Log("Global Confusion Matrix:")
-            self.dlg.Log(cm)
+                # self.dlg.Log("Global Confusion Matrix:")
+                # self.dlg.Log(cm)
+        
+            elif self.get_model_type(model_name) == "Regression":
+                # Shows the regression metrics table and hide classification tables
+                self.display_metrics_tables(["Regression"])
 
-            # Add a table to the plugin to display the confusion matrix
+                bias, mse, mae, smape_value, lin_corr = self.get_model_metrics_reg(y_true_global, y_pred_global)
 
-        elif self.get_model_type(model_name) == "Regression":
-            bias, mse, mae, smape_value, lin_corr = self.get_model_metrics_reg(y_true_global, y_pred_global)
+                # Update the table with model metrics
+                self.dlg.tableWidget_ModelMetrics.setItem(0, 0, QTableWidgetItem(f"{bias:.4f}"))
+                self.dlg.tableWidget_ModelMetrics.setItem(0, 1, QTableWidgetItem(f"{mse:.4f}"))
+                self.dlg.tableWidget_ModelMetrics.setItem(0, 2, QTableWidgetItem(f"{mae:.4f}"))
+                self.dlg.tableWidget_ModelMetrics.setItem(0, 3, QTableWidgetItem(f"{smape_value:.4f}"))
+                self.dlg.tableWidget_ModelMetrics.setItem(0, 4, QTableWidgetItem(f"{lin_corr:.4f}"))
 
-            # Update the table with model metrics
-            self.dlg.tableWidget_ModelMetrics.setItem(0, 0, QTableWidgetItem(f"{bias:.4f}"))
-            self.dlg.tableWidget_ModelMetrics.setItem(0, 1, QTableWidgetItem(f"{mse:.4f}"))
-            self.dlg.tableWidget_ModelMetrics.setItem(0, 2, QTableWidgetItem(f"{mae:.4f}"))
-            self.dlg.tableWidget_ModelMetrics.setItem(0, 3, QTableWidgetItem(f"{smape_value:.4f}"))
-            self.dlg.tableWidget_ModelMetrics.setItem(0, 4, QTableWidgetItem(f"{lin_corr:.4f}"))
+            # Log the testing completion
+            self.dlg.progressBar_RunTest.setValue(100)
+            self.dlg.Log("Model testing completed.")
+            self.is_test_running = False
 
-        # Log the testing completion
-        self.dlg.progressBar_RunTest.setValue(100)
-        self.dlg.Log("Model testing completed.")
+        self.task_queue.add_task(test_dummy_fn, on_finished=on_dummy_finished)
+
 
     def predict_model(self):
         """Test the model with the selected GMI data."""
@@ -854,12 +1041,6 @@ class GISPrecip:
             self.model_params_layout.insertRow(3, 'Min Impurity Decrease:', min_impurity_decrease)
             self.model_params_layout.insertRow(4, 'Random Seed:', random_seed)
 
-            self.dlg.Log(self.model_params_layout.itemAt(0, 1).widget().value())
-            self.dlg.Log(self.model_params_layout.itemAt(1, 1).widget().currentText())
-            self.dlg.Log(self.model_params_layout.itemAt(2, 1).widget().value())
-            self.dlg.Log(self.model_params_layout.itemAt(3, 1).widget().value())
-            self.dlg.Log(self.model_params_layout.itemAt(4, 1).widget().value())
-
         elif cur_model == "Decision Tree":
             criterion = QComboBox()
             criterion.addItems(["gini", "entropy", "log_loss"])
@@ -885,12 +1066,6 @@ class GISPrecip:
             self.model_params_layout.insertRow(3, 'Min Impurity Decrease:', min_impurity_decrease)
             self.model_params_layout.insertRow(4, 'Random Seed:', random_seed)
 
-            self.dlg.Log(self.model_params_layout.itemAt(0, 1).widget().currentText())
-            self.dlg.Log(self.model_params_layout.itemAt(1, 1).widget().currentText())
-            self.dlg.Log(self.model_params_layout.itemAt(2, 1).widget().value())
-            self.dlg.Log(self.model_params_layout.itemAt(3, 1).widget().value())
-            self.dlg.Log(self.model_params_layout.itemAt(4, 1).widget().value())
-
         elif cur_model == "AdaBoost":
             estimator = QComboBox()
             estimator.addItems(["Decision Tree"])
@@ -915,6 +1090,22 @@ class GISPrecip:
         self.dlg.formLayout_Model.insertRow(3, 'Model Parameters:' ,self.model_params_layout)
 
         return
+    
+    def display_metrics_tables(self, metrics_type = []):
+        if "Regression" in metrics_type:
+            self.dlg.tableWidget_ModelMetrics.show()
+        else:
+            self.dlg.tableWidget_ModelMetrics.hide()
+        if "Classification" in metrics_type:
+            self.dlg.tableWidget_MetricsClassification.show()
+            self.dlg.label_ConfusionMatrixActual.show()
+            self.dlg.label_ConfusionMatrixPredicted.show()
+            self.dlg.tableWidget_ConfusionMatrixClassification.show()
+        else:
+            self.dlg.tableWidget_MetricsClassification.hide()
+            self.dlg.label_ConfusionMatrixActual.hide()
+            self.dlg.label_ConfusionMatrixPredicted.hide()
+            self.dlg.tableWidget_ConfusionMatrixClassification.hide()
 
     def run(self):
         """Run method that performs all the real work"""
@@ -930,11 +1121,13 @@ class GISPrecip:
             self.dlg.button_Predict.clicked.connect(self.predict_model)
             self.dlg.comboBox_InputModel.currentTextChanged.connect(self.on_model_changed)
 
+            # Init task queue
+            self.task_queue = TaskQueue(self.dlg)
+
         self.dlg.Log("Plugin initialized.")
 
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
-        self.dlg.Log(os.getcwd())
-        # self.write_to_netCDF4_file()
+        self.dlg.Log(f"Current working directory: {os.getcwd()}")
 
         # Fetch all layers, including those inside groups
         all_layers = self.get_all_layers_with_children(QgsProject.instance().layerTreeRoot().children())
@@ -960,6 +1153,8 @@ class GISPrecip:
         self.dlg.fileWidget_TestOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
         self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(directory, 'Output', 'error_output.nc'))
         self.dlg.fileWidget_ForecastOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
+
+        self.display_metrics_tables()
 
         # # write feature attributes
         # selectedLayerIndex = self.dlg.comboBox_InputGMI.currentIndex()
