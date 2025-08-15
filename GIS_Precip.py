@@ -196,6 +196,7 @@ class GISPrecip:
         # Thread stuff
         self.is_train_running = False
         self.is_test_running = False
+        self.is_predict_running = False
         self.task_queue = None
 
     # noinspection PyMethodMayBeStatic
@@ -492,7 +493,7 @@ class GISPrecip:
         self.dlg.Log("Data preprocessing completed.")
         return gmi_data, surf_precip_data, long, lat, mask
 
-    def preprocess_GMI_data(self, gmi_data, long, lat, normalize=True):
+    def preprocess_GMI_data(self, gmi_data, long, lat):
         """Preprocess the GMI and surface precipitation data."""
         self.dlg.Log("Preprocessing GMI data...")
 
@@ -506,12 +507,8 @@ class GISPrecip:
         long = long[mask]
         lat = lat[mask]
 
-        if normalize:
-            # Normalize the GMI data
-            gmi_data = self.scaler.transform(gmi_data)
-
         self.dlg.Log("Data preprocessing completed.")
-        return gmi_data, long, lat
+        return gmi_data, long, lat, mask
 
     def get_model_type(self, model):
         if model == 'MLP Regressor':
@@ -788,7 +785,6 @@ class GISPrecip:
             # Preprocess the data
             bands, surfPrecip, long, lat, mask = self.preprocess_data_test(bands, surfPrecip, long, lat, under_sample=False)
 
-            y_pred = None  # Initialize y_pred
             def test_model_fn(bands, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete):
                 # Evaluate the model
                 y_pred = self.model.predict(bands)
@@ -822,7 +818,7 @@ class GISPrecip:
         def test_dummy_fn():
             pass
 
-        def on_dummy_finished():
+        def on_test_dummy_finished():
             # After the loop, concatenate all values and calculate metrics once
             model_name = self.dlg.comboBox_InputModel.currentText()
             y_true_global = np.concatenate(all_y_true)
@@ -909,38 +905,75 @@ class GISPrecip:
             self.dlg.Log("Model testing completed.")
             self.is_test_running = False
 
-        self.task_queue.add_task(test_dummy_fn, on_finished=on_dummy_finished)
+        self.task_queue.add_task(test_dummy_fn, on_finished=on_test_dummy_finished)
 
 
     def predict_model(self):
         """Test the model with the selected GMI data."""
-        # This method is implemented to train the model
+        # This method is implemented to predict the model
+
+        # Early out if already predicting a model
+        if self.is_predict_running:
+            self.dlg.Log("Model prediction is already in progress.")
+            return
+        self.is_predict_running = True
+
         self.dlg.Log("Predicting model with selected GMI data...")
 
         # Fetch the currently loaded layers
         layers = QgsProject.instance().layerTreeRoot().children()
 
-        # write feature attributes
+        # Collect selected GMI layers
         checkedLayers_GMI = self.dlg.comboBox_ForecastGMI.checkedItems()
-        selectedLayer_GMI = self.get_layer_by_name(checkedLayers_GMI[0])
-        bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
 
-        # Preprocess the data
-        bands, long, lat = self.preprocess_GMI_data(bands, long, lat, normalize=True)
+        # Process each GMI layer
+        total_tests = len(checkedLayers_GMI)
+        for idx, (gmi_name) in enumerate(checkedLayers_GMI, start=1):
+            # Update progress bar percentage for each test
+            percent_complete = int((idx / total_tests) * 100) if total_tests > 0 else 0
 
-        # Evaluate the model
-        y_pred = self.model.predict(bands)
+            selectedLayer_GMI = self.get_layer_by_name(gmi_name)
+            bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
 
-        # Export the results to a netCDF4 file and load it as a raster layer
-        long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
-        filepath = self.dlg.fileWidget_ForecastOutput.lineEdit().value()
-        if not filepath:
-            filepath = os.path.join(os.getcwd(), 'Temp', 'prediction_output.nc')
-        self.export_to_netCDF4_file(len(long_width), len(lat_height), long, lat, y_pred, filepath)
+            # Preprocess the data
+            bands, long, lat, mask = self.preprocess_GMI_data(bands, long, lat)
 
-        # Log the prediction completion
-        self.dlg.progressBar_Predict.setValue(100)
-        self.dlg.Log("Model prediction completed.")
+            def predict_model_fn(bands, mask, gmi_name, selectedLayer_GMI, percent_complete):
+                # Evaluate the model
+                y_pred = self.model.predict(bands)
+                return y_pred, mask, gmi_name, selectedLayer_GMI, percent_complete
+
+            def on_predicting_finished(y_pred, mask, gmi_name, selectedLayer_GMI, percent_complete):
+                # Manual clip for regression since scikit-learn does not allow to change the output activation function
+                model_name = self.dlg.comboBox_InputModel.currentText()
+                if self.get_model_type(model_name) == "Regression":
+                    y_pred = np.maximum(0, y_pred)
+
+                # Export the results to a netCDF4 file and load it as a raster layer
+                long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
+                out_dir = self.dlg.fileWidget_ForecastOutput.lineEdit().value()
+                if not out_dir:
+                    out_dir = os.path.join(os.getcwd(), 'Temp')
+                safe_gmi_name = re.sub(r'[^\w\-]', '_', gmi_name)
+                filepath = os.path.join(out_dir, f'predict_{safe_gmi_name}.nc')
+                self.dlg.Log("Writing predict output to file %s..." % filepath)
+                self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_pred, filepath)
+
+                self.dlg.progressBar_Predict.setValue(percent_complete)
+
+            self.task_queue.add_task(predict_model_fn, bands, mask, gmi_name, selectedLayer_GMI, percent_complete, on_finished=on_predicting_finished)
+
+        def predict_dummy_fn():
+            pass
+
+        def on_predict_dummy_finished():
+            # Log the prediction completion
+            self.dlg.progressBar_Predict.setValue(100)
+            self.dlg.Log("Model prediction completed.")
+            self.is_predict_running = False
+
+        self.task_queue.add_task(predict_dummy_fn, on_finished=on_predict_dummy_finished)
+
 
     def on_svm_kernel_gamma_changed(self, value):
         """Handle changes in the SVM kernel gamma parameter."""

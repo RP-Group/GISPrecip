@@ -608,12 +608,12 @@
                </column>
                <column>
                 <property name="text">
-                 <string>Violent Rain</string>
+                 <string>Heavy Rain</string>
                 </property>
                </column>
                <column>
                 <property name="text">
-                 <string>New Column</string>
+                 <string>Violent Rain</string>
                 </property>
                </column>
               </widget>
