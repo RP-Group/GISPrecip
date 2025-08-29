@@ -41,7 +41,7 @@ Compress plugin folder to zip.
 ```bash
     python3 -m venv GISPrecip
     source GISPrecip/bin/activate
-    pip install scikit-learn numpy netCDF4 scipy imbalanced-learn
+    pip install scikit-learn numpy netCDF4 scipy imbalanced-learn pickle webbrowser
 ```
 
 2. Open the python console in QGIS and open the editor.
