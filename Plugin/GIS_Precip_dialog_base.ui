@@ -13,6 +13,10 @@
   <property name="windowTitle">
    <string>GISPrecip</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>../gis_precip/icon.png</normaloff>../gis_precip/icon.png</iconset>
+  </property>
   <property name="layoutDirection">
    <enum>Qt::RightToLeft</enum>
   </property>
@@ -25,7 +29,7 @@
         <enum>Qt::LeftToRight</enum>
        </property>
        <property name="currentIndex">
-        <number>0</number>
+        <number>1</number>
        </property>
        <widget class="QWidget" name="tab">
         <attribute name="title">
@@ -103,6 +107,9 @@
                  </item>
                  <item>
                   <widget class="QCheckBox" name="checkBox_Undersampling">
+                   <property name="toolTip">
+                    <string>Useful only for classification models</string>
+                   </property>
                    <property name="text">
                     <string>Undersampling</string>
                    </property>
@@ -176,7 +183,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="toolButton_ModelHelp">
+          <widget class="QToolButton" name="toolButton_Help">
            <property name="toolTip">
             <string>Help</string>
            </property>
@@ -300,10 +307,10 @@
                   <string>netCFD(*.nc)</string>
                  </property>
                  <property name="storageMode">
-                  <enum>QgsFileWidget::SaveFile</enum>
+                  <enum>QgsFileWidget::GetDirectory</enum>
                  </property>
                  <property name="relativeStorage">
-                  <enum>QgsFileWidget::RelativeProject</enum>
+                  <enum>QgsFileWidget::Absolute</enum>
                  </property>
                 </widget>
                </item>

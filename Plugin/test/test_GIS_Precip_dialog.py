@@ -10,8 +10,7 @@
 
 __author__ = '{thaina.lopes, gabriel.rochap, salatiel.jordao}@inpe.br, juliagayotto@gmail.com'
 __date__ = '2025-07-11'
-__copyright__ = 'Copyright 2025, Gabriel Rocha, Júlia Gayotto, Salatiel Jordão e Thainá Lopes'
-
+__copyright__ = 'Copyright 2025, Gabriel Rocha, Júlia Gayotto, Salatiel Jordão and Thainá Lopes'
 
 import unittest
 

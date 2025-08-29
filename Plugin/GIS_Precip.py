@@ -8,7 +8,7 @@
                               -------------------
         begin                : 2025-07-11
         git sha              : $Format:%H$
-        copyright            : (C) 2025 by Gabriel Rocha, Júlia Gayotto, Salatiel Jordão e Thainá Lopes
+        copyright            : (C) 2025 by Gabriel Rocha, Júlia Gayotto, Salatiel Jordão and Thainá Lopes
         email                : {thaina.lopes, gabriel.rochap, salatiel.jordao}@inpe.br, juliagayotto@gmail.com
  ***************************************************************************/
 
@@ -28,7 +28,6 @@ from qgis.core import QgsProject, QgsRasterLayer
 from qgis.core import QgsSingleBandPseudoColorRenderer, QgsColorRampShader, QgsRasterShader, QgsStyle
 from qgis.gui import QgsSingleBandPseudoColorRendererWidget
 
-import traceback
 import inspect
 from collections import deque
 import numpy as np
@@ -41,15 +40,13 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from sklearn.pipeline import Pipeline
+from sklearn.compose import TransformedTargetRegressor
 from sklearn.metrics import classification_report, confusion_matrix, mean_squared_error, mean_absolute_error
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
 
-from scipy.stats import pearsonr
 from imblearn.under_sampling import RandomUnderSampler
-
-from scipy.interpolate import griddata
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -60,6 +57,7 @@ from pathlib import Path
 import re
 
 import pickle
+import webbrowser
 
 class TaskQueue:
     def __init__(self, dlg):
@@ -297,7 +295,7 @@ class GISPrecip:
         icon_path = ':/plugins/GIS_Precip/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'GIS Precip'),
+            text=self.tr(u'GISPrecip'),
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -455,12 +453,14 @@ class GISPrecip:
 
         if self.trained_model_type == "Classification":
             surf_precip_data = self.convert_to_classification(surf_precip_data)
-
-        if self.trained_model_type == "Classification":
             # if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
             if under_sample:
                 # Handle class imbalance using RandomUnderSampler
                 gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data, surf_precip_data)
+        # elif self.trained_model_type == "Regression":
+        #     # Apply StandardScaler to surf_precip_data for regression
+        #     scaler = StandardScaler()
+        #     surf_precip_data = scaler.fit_transform(surf_precip_data.reshape(-1, 1)).flatten()
 
         self.dlg.Log("Data preprocessing completed.")
         return gmi_data, surf_precip_data, long, lat
@@ -581,6 +581,14 @@ class GISPrecip:
         if existing_layer:
             QgsProject.instance().removeMapLayer(existing_layer.id())
 
+        # Delete existing NetCDF file if it exists
+        if os.path.exists(output_filepath):
+            os.remove(output_filepath)
+        # Delete also the .aux.xml file
+        aux_filepath = output_filepath + ".aux.xml"
+        if os.path.exists(aux_filepath):
+            os.remove(aux_filepath)
+
         ncfile = Dataset(output_filepath, 'w', format='NETCDF4_CLASSIC')
 
         # Create dimensions
@@ -697,10 +705,8 @@ class GISPrecip:
         # Create and train the SVM model
         if self.dlg.checkBox_Normalize.isChecked():
             if model_name == "MLP Regressor":
-                from sklearn.preprocessing import MinMaxScaler
-                scaler_step = ('scaler', MinMaxScaler())
+                scaler_step = ('scaler', StandardScaler())
             else:
-                from sklearn.preprocessing import StandardScaler
                 scaler_step = ('scaler', StandardScaler())
         else:
             scaler_step = None
@@ -710,19 +716,36 @@ class GISPrecip:
             # Convert a string like '20;20' to a tuple like (20, 20)
             hid_layers_str = self.model_params_layout.itemAt(1, 1).widget().text()
             hidden_layer_sizes = tuple(int(x) for x in hid_layers_str.split(';') if x.strip())
-            model_step = ('mlp', MLPRegressor(
-                activation=self.model_params_layout.itemAt(0, 1).widget().currentText(),
-                hidden_layer_sizes=hidden_layer_sizes,
-                alpha=0.0011045192633616075,
-                learning_rate_init=self.model_params_layout.itemAt(2, 1).widget().value(),
-                solver=self.model_params_layout.itemAt(3, 1).widget().currentText(),
-                max_iter=self.model_params_layout.itemAt(4, 1).widget().value(),
-                early_stopping=True,
-                n_iter_no_change=10,
-                validation_fraction=0.1,
-                shuffle=True,
-                random_state=self.model_params_layout.itemAt(5, 1).widget().value()
+            model_step = ('mlp', TransformedTargetRegressor(
+                regressor= MLPRegressor(
+                    activation=self.model_params_layout.itemAt(0, 1).widget().currentText(),
+                    hidden_layer_sizes=hidden_layer_sizes,
+                    alpha=0.0011045192633616075,
+                    learning_rate_init=self.model_params_layout.itemAt(2, 1).widget().value(),
+                    solver=self.model_params_layout.itemAt(3, 1).widget().currentText(),
+                    max_iter=self.model_params_layout.itemAt(4, 1).widget().value(),
+                    early_stopping=True,
+                    n_iter_no_change=10,
+                    validation_fraction=0.1,
+                    shuffle=True,
+                    random_state=self.model_params_layout.itemAt(5, 1).widget().value()
+                ),
+                func=np.log1p,         # Transform y before fitting
+                inverse_func=np.expm1   # Inverse transform y_pred after predicting
             ))
+            # model_step = ('mlp', MLPRegressor(
+            #     activation=self.model_params_layout.itemAt(0, 1).widget().currentText(),
+            #     hidden_layer_sizes=hidden_layer_sizes,
+            #     alpha=0.0011045192633616075,
+            #     learning_rate_init=self.model_params_layout.itemAt(2, 1).widget().value(),
+            #     solver=self.model_params_layout.itemAt(3, 1).widget().currentText(),
+            #     max_iter=self.model_params_layout.itemAt(4, 1).widget().value(),
+            #     early_stopping=True,
+            #     n_iter_no_change=10,
+            #     validation_fraction=0.1,
+            #     shuffle=True,
+            #     random_state=self.model_params_layout.itemAt(5, 1).widget().value()
+            # ))
         elif model_name == "SVM":
             degree_param = 3 if self.SVM_degree_param is None else self.SVM_degree_param.value()
             gamma_param = 'scale' if self.SVM_gamma_param is None else self.SVM_gamma_param.currentText()
@@ -835,13 +858,26 @@ class GISPrecip:
 
                 # Export the results to a netCDF4 file and load it as a raster layer
                 long_width, lat_height = self.get_long_lat(selectedLayer_GMI)
+                safe_precip_name = re.sub(r'[^\w\-]', '_', precip_name)
                 out_dir = self.dlg.fileWidget_TestOutput.lineEdit().value()
                 if not out_dir:
                     out_dir = os.path.join(os.getcwd(), 'Temp')
-                safe_precip_name = re.sub(r'[^\w\-]', '_', precip_name)
                 filepath = os.path.join(out_dir, f'test_{safe_precip_name}.nc')
                 self.dlg.Log("Writing test output to file %s..." % filepath)
                 self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_pred, filepath)
+
+                # Error layer generation
+                y_error = None
+                if self.trained_model_type == "Regression":
+                    y_error = np.abs(surfPrecip - y_pred)
+                elif self.trained_model_type == "Classification":
+                    y_error = (y_pred != surfPrecip).astype(int)
+                out_dir = self.dlg.fileWidget_ErrorOutput.lineEdit().value()
+                if not out_dir:
+                    out_dir = os.path.join(os.getcwd(), 'Temp')
+                filepath = os.path.join(out_dir, f'error_{safe_precip_name}.nc')
+                self.dlg.Log("Writing error output to file %s..." % filepath)
+                self.export_to_netCDF4_file(len(long_width), len(lat_height), long_width, lat_height, mask, y_error, filepath)
 
                 self.dlg.progressBar_RunTest.setValue(percent_complete)
 
@@ -1169,6 +1205,11 @@ class GISPrecip:
 
         self.dlg.formLayout_Model.insertRow(3, 'Model Parameters:' ,self.model_params_layout)
 
+        if (self.get_model_type(cur_model) == "Regression"):
+            self.dlg.checkBox_Undersampling.setEnabled(False)
+        else:
+            self.dlg.checkBox_Undersampling.setEnabled(True)
+
         return
     
     def display_metrics_tables(self, metrics_type = []):
@@ -1187,6 +1228,10 @@ class GISPrecip:
             self.dlg.label_ConfusionMatrixPredicted.hide()
             self.dlg.tableWidget_ConfusionMatrixClassification.hide()
 
+    def open_documentation(self):
+        """Open the documentation for the plugin"""
+        webbrowser.open("https://github.com/RP-Group/GISPrecip")
+
     def run(self):
         """Run method that performs all the real work"""
 
@@ -1195,6 +1240,7 @@ class GISPrecip:
         if self.first_start == True:
             self.first_start = False
             self.dlg = GISPrecipDialog()
+            self.dlg.setWindowIcon(QIcon(':/plugins/GIS_Precip/icon.png'))
             self.dlg.button_TrainModel.clicked.connect(self.train_model)
             # self.dlg.button_ExportModel.clicked.connect(self.train_model)
             self.dlg.button_RunTest.clicked.connect(self.test_model)
@@ -1202,6 +1248,7 @@ class GISPrecip:
             self.dlg.comboBox_InputModel.currentTextChanged.connect(self.on_model_changed)
             self.dlg.button_ExportModel.clicked.connect(self.save_model)
             self.dlg.button_LoadModel.clicked.connect(self.load_model)
+            self.dlg.toolButton_Help.clicked.connect(self.open_documentation)
 
             # Init task queue
             self.task_queue = TaskQueue(self.dlg)
@@ -1233,7 +1280,7 @@ class GISPrecip:
         # self.dlg.fileWidget_TestOutput.setFilter("All files (*.*);;JPEG (*.jpg *.jpeg);;TIFF (*.tif);;netCFD(*.nc)")
         directory = self.get_project_or_working_directory()
         self.dlg.fileWidget_TestOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
-        self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(directory, 'Output', 'error_output.nc'))
+        self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
         self.dlg.fileWidget_ForecastOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
 
         self.dlg.fileWidget_ExportModel.setFilter("Pickle files (*.pkl);;All files (*.*)")

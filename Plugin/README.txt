@@ -1,10 +1,10 @@
 Plugin Builder Results
 
 Your plugin GISPrecip was created in:
-    E:/Documents/iCloudDrive/Documents/INPE/Mestrado/2° Período/Aprendizado Computacional e Reconhecimento de Padrões/Projeto/Plugin\gis_precip
+    Plugin\gis_precip
 
 Your QGIS plugin directory is located at:
-    C:/Users/gabri/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
+    AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
 
 What's Next:
 
