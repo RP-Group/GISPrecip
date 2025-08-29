@@ -8,8 +8,8 @@
                              -------------------
         begin                : 2025-07-11
         git sha              : $Format:%H$
-        copyright            : (C) 2025 by Gabriel Rocha Pinto
-        email                : gabriel.rocha.pinto@outlook.com
+        copyright            : (C) 2025 by Gabriel Rocha, Júlia Gayotto, Salatiel Jordão e Thainá Lopes
+        email                : {thaina.lopes, gabriel.rochap, salatiel.jordao}@inpe.br, juliagayotto@gmail.com
  ***************************************************************************/
 
 /***************************************************************************

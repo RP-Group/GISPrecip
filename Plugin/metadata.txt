@@ -6,9 +6,10 @@
 name=GISPrecip
 qgisMinimumVersion=3.0
 description=Plugin that predicts the surface precipitation from GMI data.
-version=0.1
-author=Gabriel Rocha Pinto
-email=gabriel.rocha.pinto@outlook.com
+version=1.0
+autor = Gabriel Rocha, Júlia Gayotto, Salatiel Jordão e Thainá Lopes
+email={thaina.lopes, gabriel.rochap, salatiel.jordao}@inpe.br, juliagayotto@gmail.com
+
 
 about=Plugin that predicts the surface precipitation from GMI data.
 

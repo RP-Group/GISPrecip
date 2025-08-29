@@ -8,8 +8,8 @@
                               -------------------
         begin                : 2025-07-11
         git sha              : $Format:%H$
-        copyright            : (C) 2025 by Gabriel Rocha Pinto
-        email                : gabriel.rocha.pinto@outlook.com
+        copyright            : (C) 2025 by Gabriel Rocha, Júlia Gayotto, Salatiel Jordão e Thainá Lopes
+        email                : {thaina.lopes, gabriel.rochap, salatiel.jordao}@inpe.br, juliagayotto@gmail.com
  ***************************************************************************/
 
 /***************************************************************************
@@ -50,7 +50,6 @@ from scipy.stats import pearsonr
 from imblearn.under_sampling import RandomUnderSampler
 
 from scipy.interpolate import griddata
-from statsmodels.regression.linear_model import RegressionModel
 
 # Initialize Qt resources from file resources.py
 from .resources import *
