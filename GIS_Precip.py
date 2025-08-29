@@ -60,6 +60,8 @@ import os.path
 from pathlib import Path
 import re
 
+import pickle
+
 class TaskQueue:
     def __init__(self, dlg):
         self.dlg = dlg
@@ -187,6 +189,7 @@ class GISPrecip:
         self.first_start = None
 
         self.model = None
+        self.trained_model_type = None
 
         self.model_params_layout = None
         self.SVM_degree_param = None
@@ -417,21 +420,21 @@ class GISPrecip:
         self.dlg.Log("Surface precipitation data preprocessing completed for layer: {}".format(surf_precip_layer.name()))
         return data_flat, long_flat, lat_flat
 
-    def convert_to_classification(self, surf_precip_data, model_name):
-        if model_name == "SVM":
-            # Convert precipitation to binary label (rain/no rain)
-            self.dlg.Log("Creating precipitation intensity binary classes (0: No rain, 1: Rain)")
-            return (surf_precip_data > 0.1).astype(int)  # 0 = no rain, 1 = rain
-        else:
-            # TODO: QGIS maps the data to colors based on min and max values, not based on the classes defined here
-            self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy, 4: Violent)")
-            y = surf_precip_data.flatten()
-            cat = np.zeros_like(y, dtype=int)
-            cat[(y > 0.0) & (y < 2.5)] = 1  # Leve
-            cat[(y >= 2.5) & (y < 10)] = 2  # Moderada
-            cat[(y >= 10) & (y < 50)] = 3  # Pesada
-            cat[(y >= 50)] = 4 # Violenta
-            return cat
+    def convert_to_classification(self, surf_precip_data):
+        # if model_name == "SVM":
+        #     # Convert precipitation to binary label (rain/no rain)
+        #     self.dlg.Log("Creating precipitation intensity binary classes (0: No rain, 1: Rain)")
+        #     return (surf_precip_data > 0.1).astype(int)  # 0 = no rain, 1 = rain
+        # else:
+        # TODO: QGIS maps the data to colors based on min and max values, not based on the classes defined here
+        self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy, 4: Violent)")
+        y = surf_precip_data.flatten()
+        cat = np.zeros_like(y, dtype=int)
+        cat[(y > 0.0) & (y < 2.5)] = 1  # Leve
+        cat[(y >= 2.5) & (y < 10)] = 2  # Moderada
+        cat[(y >= 10) & (y < 50)] = 3  # Pesada
+        cat[(y >= 50)] = 4 # Violenta
+        return cat
 
     def preprocess_data(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
         """Preprocess the GMI and surface precipitation data."""
@@ -451,19 +454,19 @@ class GISPrecip:
         long = long[mask]
         lat = lat[mask]
 
-        model_name = self.dlg.comboBox_InputModel.currentText()
-        if self.get_model_type(model_name) == "Classification":
-            surf_precip_data = self.convert_to_classification(surf_precip_data, model_name)
+        if self.trained_model_type == "Classification":
+            surf_precip_data = self.convert_to_classification(surf_precip_data)
 
-        if self.get_model_type(model_name) == "Classification":
-            if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
+        if self.trained_model_type == "Classification":
+            # if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
+            if under_sample:
                 # Handle class imbalance using RandomUnderSampler
                 gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data, surf_precip_data)
 
         self.dlg.Log("Data preprocessing completed.")
         return gmi_data, surf_precip_data, long, lat
 
-    def preprocess_data_test(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
+    def preprocess_data_test(self, gmi_data, surf_precip_data, long, lat):
         """Preprocess the GMI and surface precipitation data."""
         self.dlg.Log("Preprocessing GMI and surface precipitation data...")
 
@@ -481,14 +484,8 @@ class GISPrecip:
         long = long[mask]
         lat = lat[mask]
 
-        model_name = self.dlg.comboBox_InputModel.currentText()
-        if self.get_model_type(model_name) == "Classification":
-            surf_precip_data = self.convert_to_classification(surf_precip_data, model_name)
-
-        if self.get_model_type(model_name) == "Classification":
-            if under_sample and model_name == "SVM": # This seems to be the only model that needs under-sampling
-                # Handle class imbalance using RandomUnderSampler
-                gmi_data, surf_precip_data = RandomUnderSampler(random_state=42).fit_resample(gmi_data, surf_precip_data)
+        if self.trained_model_type == "Classification":
+            surf_precip_data = self.convert_to_classification(surf_precip_data)
 
         self.dlg.Log("Data preprocessing completed.")
         return gmi_data, surf_precip_data, long, lat, mask
@@ -523,6 +520,35 @@ class GISPrecip:
             return "Classification"
         else:
             return "None"
+        
+    def save_model(self):
+        filepath = self.dlg.fileWidget_ExportModel.lineEdit().value()
+
+        # Bundle everything into a dict
+        package = {
+            "model": self.model,
+            "extra_data": {
+                "type": self.trained_model_type
+            }
+        }
+
+        try:
+            with open(filepath, 'wb') as f:
+                pickle.dump(package, f)
+                self.dlg.Log("Model saved to {}".format(filepath))
+        except Exception as e:
+            self.dlg.Log("Failed to save model to {}: {}".format(filepath, e))
+
+    def load_model(self):
+        filepath = self.dlg.fileWidget_LoadModel.lineEdit().value()
+        try:
+            with open(filepath, 'rb') as f:
+                package = pickle.load(f)
+                self.model = package.get("model")
+                self.trained_model_type = package.get("extra_data", {}).get("type")
+                self.dlg.Log("Model loaded from {}".format(filepath))
+        except Exception as e:
+            self.dlg.Log("Failed to load model from {}: {}".format(filepath, e))
 
     def get_model_metrics_reg(self, y_true, y_pred):
         """Calculate model metrics."""
@@ -618,6 +644,7 @@ class GISPrecip:
 
         self.dlg.Log("Training model with selected GMI and Surface Precipitation data...")
 
+        self.dlg.progressBar_TrainModel.setRange(0, 0)
         self.dlg.progressBar_TrainModel.setValue(0)
 
         # Fetch the currently loaded layers
@@ -628,6 +655,9 @@ class GISPrecip:
         checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
 
         gmi_data_list, surf_precip_list, long_list, lat_list = [], [], [], []
+
+        model_name = self.dlg.comboBox_InputModel.currentText()
+        self.trained_model_type = self.get_model_type(model_name) # this must be before preprocessing the data, since it is used there
 
         # Process each GMI and surface precipitation layer as a pair
         for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
@@ -666,7 +696,6 @@ class GISPrecip:
         bands, surfPrecip, long, lat = self.preprocess_data(bands, surfPrecip, long, lat, under_sample=undersampling)
 
         # Create and train the SVM model
-        model_name = self.dlg.comboBox_InputModel.currentText()
         if self.dlg.checkBox_Normalize.isChecked():
             if model_name == "MLP Regressor":
                 from sklearn.preprocessing import MinMaxScaler
@@ -687,11 +716,13 @@ class GISPrecip:
                 hidden_layer_sizes=hidden_layer_sizes,
                 alpha=0.0011045192633616075,
                 learning_rate_init=self.model_params_layout.itemAt(2, 1).widget().value(),
-                max_iter=500,
+                solver=self.model_params_layout.itemAt(3, 1).widget().currentText(),
+                max_iter=self.model_params_layout.itemAt(4, 1).widget().value(),
                 early_stopping=True,
                 n_iter_no_change=10,
                 validation_fraction=0.1,
-                random_state=self.model_params_layout.itemAt(3, 1).widget().value()
+                shuffle=True,
+                random_state=self.model_params_layout.itemAt(5, 1).widget().value()
             ))
         elif model_name == "SVM":
             degree_param = 3 if self.SVM_degree_param is None else self.SVM_degree_param.value()
@@ -704,7 +735,8 @@ class GISPrecip:
                 degree=degree_param,
                 gamma=gamma_param,
                 class_weight='balanced', # use balanced weights if rain is rare
-                random_state=self.model_params_layout.itemAt(2, 1).widget().value()))
+                decision_function_shape=self.model_params_layout.itemAt(2, 1).widget().currentText(),
+                random_state=self.model_params_layout.itemAt(3, 1).widget().value()))
         elif model_name == "Random Forest":
             model_step = ('rf', RandomForestClassifier(
                 n_estimators=self.model_params_layout.itemAt(0, 1).widget().value(),
@@ -731,15 +763,18 @@ class GISPrecip:
                 learning_rate=self.model_params_layout.itemAt(2, 1).widget().value(),
                 random_state=self.model_params_layout.itemAt(3, 1).widget().value()))
         self.model = Pipeline([scaler_step, model_step])
+        self.trained_model_type = self.get_model_type(model_name)
         # Run model training asynchronously to avoid blocking the UI
 
         def train_model_fn(bands, surfPrecip):
             self.model.fit(bands, surfPrecip)
 
         def on_training_finished():
+            self.dlg.progressBar_TrainModel.setRange(0, 100)
             self.dlg.progressBar_TrainModel.setValue(100)
             self.dlg.Log("Model training completed.")
             self.is_train_running = False
+            self.dlg.button_ExportModel.setEnabled(True)
 
         self.dlg.progressBar_TrainModel.setValue(10)
         self.dlg.Log("Training model asynchronously...")
@@ -783,7 +818,7 @@ class GISPrecip:
             surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
 
             # Preprocess the data
-            bands, surfPrecip, long, lat, mask = self.preprocess_data_test(bands, surfPrecip, long, lat, under_sample=False)
+            bands, surfPrecip, long, lat, mask = self.preprocess_data_test(bands, surfPrecip, long, lat)
 
             def test_model_fn(bands, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete):
                 # Evaluate the model
@@ -792,8 +827,7 @@ class GISPrecip:
 
             def on_testing_finished(y_pred, surfPrecip, mask, precip_name, selectedLayer_GMI, percent_complete):
                 # Manual clip for regression since scikit-learn does not allow to change the output activation function
-                model_name = self.dlg.comboBox_InputModel.currentText()
-                if self.get_model_type(model_name) == "Regression":
+                if self.trained_model_type == "Regression":
                     y_pred = np.maximum(0, y_pred)
 
                 # Collect for global metrics
@@ -820,12 +854,11 @@ class GISPrecip:
 
         def on_test_dummy_finished():
             # After the loop, concatenate all values and calculate metrics once
-            model_name = self.dlg.comboBox_InputModel.currentText()
             y_true_global = np.concatenate(all_y_true)
             y_pred_global = np.concatenate(all_y_pred)
 
             classes = [0, 1, 2, 3, 4]
-            if self.get_model_type(model_name) == "Classification":
+            if self.trained_model_type == "Classification":
                 # Hides the regression metrics table and show classification tables
                 self.display_metrics_tables(["Classification"])
 
@@ -887,7 +920,7 @@ class GISPrecip:
                 # self.dlg.Log("Global Confusion Matrix:")
                 # self.dlg.Log(cm)
         
-            elif self.get_model_type(model_name) == "Regression":
+            elif self.trained_model_type == "Regression":
                 # Shows the regression metrics table and hide classification tables
                 self.display_metrics_tables(["Regression"])
 
@@ -975,33 +1008,36 @@ class GISPrecip:
         self.task_queue.add_task(predict_dummy_fn, on_finished=on_predict_dummy_finished)
 
 
-    def on_svm_kernel_gamma_changed(self, value):
+    def on_svm_kernel_gamma_changed(self, value, gamma_row):
         """Handle changes in the SVM kernel gamma parameter."""
-        self.model_params_layout.removeRow(5)
+        self.model_params_layout.removeRow(gamma_row)
         if value == "float":
             self.SVM_gamma_value_param = QDoubleSpinBox()
             self.SVM_gamma_value_param.setDecimals(6)
             self.SVM_gamma_value_param.setRange(0.000001, 10000.0)
             self.SVM_gamma_value_param.setSingleStep(0.1)
             self.SVM_gamma_value_param.setValue(0.5)
-            self.model_params_layout.insertRow(5, 'Gamma value:', self.SVM_gamma_value_param)
+            self.model_params_layout.insertRow(gamma_row, 'Gamma value:', self.SVM_gamma_value_param)
 
     def on_svm_kernel_changed(self, value):
         """Handle changes in the SVM kernel parameter."""
+        self.model_params_layout.removeRow(6)
         self.model_params_layout.removeRow(5)
         self.model_params_layout.removeRow(4)
-        self.model_params_layout.removeRow(3)
         if value == "poly":
             self.SVM_degree_param = QSpinBox()
             self.SVM_degree_param.setRange(0, 50)
             self.SVM_degree_param.setValue(3)
-            self.model_params_layout.insertRow(3, 'Degree:', self.SVM_degree_param)
+            self.model_params_layout.insertRow(4, 'Degree:', self.SVM_degree_param)
         if value == "rbf" or value == "poly" or value == "sigmoid":
             self.SVM_gamma_param = QComboBox()
             self.SVM_gamma_param.addItems(["scale", "auto", "float"])
             self.SVM_gamma_param.setCurrentText("scale")
-            self.SVM_gamma_param.currentTextChanged.connect(self.on_svm_kernel_gamma_changed)
-            self.model_params_layout.insertRow(4, 'Gamma:', self.SVM_gamma_param)
+            self.SVM_gamma_param.currentTextChanged.connect(lambda value: self.on_svm_kernel_gamma_changed(value, gamma_row))
+            gamma_row = 0
+            if value == "poly": gamma_row = 6
+            else: gamma_row = 5
+            self.model_params_layout.insertRow(gamma_row, 'Gamma:', self.SVM_gamma_param)
 
     def on_model_changed(self, cur_model):
         """Handle changes in the model selection."""
@@ -1022,13 +1058,21 @@ class GISPrecip:
             learning_rate.setRange(0.000001, 10.0)
             learning_rate.setSingleStep(0.001)
             learning_rate.setValue(0.001)
+            solver_options = QComboBox()
+            solver_options.addItems(["adam", "sgd"])
+            solver_options.setCurrentText("adam")
+            max_epochs = QSpinBox()
+            max_epochs.setRange(1, 100000)
+            max_epochs.setValue(500)
             random_seed = QSpinBox()
             random_seed.setRange(0, 1000000)
             random_seed.setValue(8)
             self.model_params_layout.insertRow(0, 'Activation Function:', activation_functions)
             self.model_params_layout.insertRow(1, 'Hidden Layers Neurons:', hid_layers_neurons)
             self.model_params_layout.insertRow(2, 'Learning Rate:', learning_rate)
-            self.model_params_layout.insertRow(3, 'Random Seed:', random_seed)
+            self.model_params_layout.insertRow(3, 'Solver:', solver_options)
+            self.model_params_layout.insertRow(4, 'Max Epochs:', max_epochs)
+            self.model_params_layout.insertRow(5, 'Random Seed:', random_seed)
 
         elif cur_model == "SVM":
             kernel = QComboBox()
@@ -1041,12 +1085,16 @@ class GISPrecip:
             C_param.setRange(0.000001, 100000.0)
             C_param.setSingleStep(1.0)
             C_param.setValue(100.0)
+            decision_type = QComboBox()
+            decision_type.addItems(["ovr", "ovo"])
+            decision_type.setCurrentText("ovr")
             random_seed = QSpinBox()
             random_seed.setRange(0, 1000000)
             random_seed.setValue(8)
             self.model_params_layout.insertRow(0, 'Kernel:', kernel)
             self.model_params_layout.insertRow(1, 'C:', C_param)
-            self.model_params_layout.insertRow(2, 'Random Seed:', random_seed)
+            self.model_params_layout.insertRow(2, 'Decision Type:', decision_type)
+            self.model_params_layout.insertRow(3, 'Random Seed:', random_seed)
 
         elif cur_model == "Random Forest":
             n_estimators = QSpinBox()
@@ -1153,6 +1201,8 @@ class GISPrecip:
             self.dlg.button_RunTest.clicked.connect(self.test_model)
             self.dlg.button_Predict.clicked.connect(self.predict_model)
             self.dlg.comboBox_InputModel.currentTextChanged.connect(self.on_model_changed)
+            self.dlg.button_ExportModel.clicked.connect(self.save_model)
+            self.dlg.button_LoadModel.clicked.connect(self.load_model)
 
             # Init task queue
             self.task_queue = TaskQueue(self.dlg)
@@ -1186,6 +1236,9 @@ class GISPrecip:
         self.dlg.fileWidget_TestOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
         self.dlg.fileWidget_ErrorOutput.lineEdit().setValue(os.path.join(directory, 'Output', 'error_output.nc'))
         self.dlg.fileWidget_ForecastOutput.lineEdit().setValue(os.path.join(directory, 'Output'))
+
+        self.dlg.fileWidget_ExportModel.setFilter("Pickle files (*.pkl);;All files (*.*)")
+        self.dlg.fileWidget_LoadModel.setFilter("Pickle files (*.pkl);;All files (*.*)")
 
         self.display_metrics_tables()
 

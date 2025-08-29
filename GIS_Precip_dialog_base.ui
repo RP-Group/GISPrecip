@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>607</width>
-    <height>675</height>
+    <height>807</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -25,7 +25,7 @@
         <enum>Qt::LeftToRight</enum>
        </property>
        <property name="currentIndex">
-        <number>1</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tab">
         <attribute name="title">
@@ -43,7 +43,7 @@
               <x>0</x>
               <y>0</y>
               <width>561</width>
-              <height>428</height>
+              <height>560</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -107,7 +107,7 @@
                     <string>Undersampling</string>
                    </property>
                    <property name="checked">
-                    <bool>true</bool>
+                    <bool>false</bool>
                    </property>
                   </widget>
                  </item>
@@ -140,7 +140,7 @@
                 </widget>
                </item>
                <item row="5" column="0">
-                <widget class="QPushButton" name="Button_ExportData">
+                <widget class="QPushButton" name="button_ExportModel">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
@@ -150,7 +150,11 @@
                 </widget>
                </item>
                <item row="5" column="1">
-                <widget class="QgsFileWidget" name="fileWidget_ExportModel"/>
+                <widget class="QgsFileWidget" name="fileWidget_ExportModel">
+                 <property name="storageMode">
+                  <enum>QgsFileWidget::SaveFile</enum>
+                 </property>
+                </widget>
                </item>
                <item row="6" column="0">
                 <widget class="QPushButton" name="button_LoadModel">
@@ -653,7 +657,7 @@
               <x>0</x>
               <y>0</y>
               <width>561</width>
-              <height>428</height>
+              <height>560</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_6">
