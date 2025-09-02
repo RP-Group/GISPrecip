@@ -361,6 +361,9 @@ class GISPrecip:
 
         # Assuming the layer has a CRS with geographic coordinates
         crs = layer.crs()
+        if not crs.isValid():
+            crs = QgsProject.instance().crs()
+            layer.setCrs(crs)
         if crs.isGeographic():
             extent = layer.extent()
             long = np.linspace(extent.xMinimum(), extent.xMaximum(), layer.width())
