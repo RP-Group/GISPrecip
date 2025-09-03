@@ -677,18 +677,18 @@ class GISPrecip:
             surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
 
             # ====== FILTRO DE QUALIDADE ======
-            # surfPrecip, rqi, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-            # min_rqi_threshold = 0.0
-            # mask_valid = (rqi >= min_rqi_threshold)
+            surfPrecip, rqi, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
+            min_rqi_threshold = 0.0
+            mask_valid = (rqi >= min_rqi_threshold)
 
-            # Aplica máscara: NaN para valores ruins
-            # surfPrecip = np.where(mask_valid, surfPrecip, np.nan)
+            #Aplica máscara: NaN para valores ruins
+            surfPrecip = np.where(mask_valid, surfPrecip, np.nan)
 
-            # ====== TRATAMENTO DE NAN ======
-            # nan_fill_value = -1.5
-            # bands = np.where(np.isnan(bands), nan_fill_value, bands)
-            # surfPrecip = np.where(np.isnan(surfPrecip), nan_fill_value, surfPrecip)
-            # ===============================
+           # ====== TRATAMENTO DE NAN ======
+            nan_fill_value = -1.5
+            bands = np.where(np.isnan(bands), nan_fill_value, bands)
+            surfPrecip = np.where(np.isnan(surfPrecip), nan_fill_value, surfPrecip)
+           # ===============================
 
             gmi_data_list.append(bands)
             surf_precip_list.append(surfPrecip)
