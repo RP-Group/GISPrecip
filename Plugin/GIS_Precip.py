@@ -694,6 +694,14 @@ class GISPrecip:
         model_name = self.dlg.comboBox_InputModel.currentText()
         self.trained_model_type = self.get_model_type(model_name) # this must be before preprocessing the data, since it is used there
 
+        # Check
+        if len(checkedLayers_GMI) == 0 or len(checkedLayers_SurfPrecip) == 0:
+            self.dlg.Log("Please select at least one GMI layer and one Surface Precipitation layer for training.")
+            self.is_train_running = False
+            self.dlg.progressBar_TrainModel.setRange(0, 1)
+            self.dlg.progressBar_TrainModel.setValue(0)
+            return
+
         if (self.dlg.checkBox_RQI.isChecked()):
             if len(checkedLayers_RQI) != len(checkedLayers_GMI) or len(checkedLayers_RQI) != len(checkedLayers_SurfPrecip):
                 self.dlg.Log("The number of selected RQI layers must match the number of selected GMI and Surface Precipitation layers.")
@@ -870,6 +878,21 @@ class GISPrecip:
         # Collect selected GMI layers
         checkedLayers_GMI = self.dlg.comboBox_TestGMI.checkedItems()
         checkedLayers_SurfPrecip = self.dlg.comboBox_TestSurfPrecip.checkedItems()
+
+        # Checks
+        if len(checkedLayers_GMI) == 0 or len(checkedLayers_SurfPrecip) == 0:
+            self.dlg.Log("Please select at least one GMI layer and one Surface Precipitation layer for testing.")
+            self.is_test_running = False
+            return
+        if len(checkedLayers_GMI) != len(checkedLayers_SurfPrecip):
+            self.dlg.Log("The number of selected GMI layers must match the number of selected Surface Precipitation layers.")
+            self.is_test_running = False
+            return
+        # Check if a model is loaded
+        if self.model is None:
+            self.dlg.Log("No model is loaded. Please load a model before testing.")
+            self.is_test_running = False
+            return
 
         # Collect all true and predicted values for global metrics
         all_y_true = []
