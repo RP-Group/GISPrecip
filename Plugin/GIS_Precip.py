@@ -684,10 +684,10 @@ class GISPrecip:
         # Fetch the currently loaded layers
         layers = QgsProject.instance().layerTreeRoot().children()
 
-        # Collect selected GMI layers
-        checkedLayers_GMI = self.dlg.comboBox_InputGMI.checkedItems()
-        checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
-        checkedLayers_RQI = self.dlg.comboBox_InputRQI.checkedItems()
+        # Collect selected GMI layers, sorted by name
+        checkedLayers_GMI = sorted(self.dlg.comboBox_InputGMI.checkedItems())
+        checkedLayers_SurfPrecip = sorted(self.dlg.comboBox_InputSurfPrecip.checkedItems())
+        checkedLayers_RQI = sorted(self.dlg.comboBox_InputRQI.checkedItems())
 
         gmi_data_list, surf_precip_list, rqi_data_list, long_list, lat_list = [], [], [], [], []
 
@@ -876,8 +876,8 @@ class GISPrecip:
         layers = QgsProject.instance().layerTreeRoot().children()
 
         # Collect selected GMI layers
-        checkedLayers_GMI = self.dlg.comboBox_TestGMI.checkedItems()
-        checkedLayers_SurfPrecip = self.dlg.comboBox_TestSurfPrecip.checkedItems()
+        checkedLayers_GMI = sorted(self.dlg.comboBox_TestGMI.checkedItems())
+        checkedLayers_SurfPrecip = sorted(self.dlg.comboBox_TestSurfPrecip.checkedItems())
 
         # Checks
         if len(checkedLayers_GMI) == 0 or len(checkedLayers_SurfPrecip) == 0:
