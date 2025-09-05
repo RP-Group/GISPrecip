@@ -419,6 +419,26 @@ class GISPrecip:
 
         self.dlg.Log("Surface precipitation data preprocessing completed for layer: {}".format(surf_precip_layer.name()))
         return data_flat, long_flat, lat_flat
+    
+    def get_RQI_data(self, rqi_layer):
+        """Preprocess RQI data layer."""
+        # This method will be implemented to preprocess RQI data
+        self.dlg.Log("Preprocessing RQI data layer: {}".format(rqi_layer.name()))
+
+        mask = True
+        arr = rqi_layer.as_numpy(mask) # size is (rqi, lat, long) -> (rqi, width, height)
+        long, lat = self.get_long_lat(rqi_layer)
+
+        # Create a grid of coordinates
+        long_coords, lat_coords = np.meshgrid(long, lat, indexing='ij')
+
+        # Flatten everything
+        long_flat = long_coords.flatten()
+        lat_flat = lat_coords.flatten()
+        data_flat = arr.reshape(1, -1).T.flatten()  # shape (width*height, rqi)
+
+        self.dlg.Log("RQI data preprocessing completed for layer: {}".format(rqi_layer.name()))
+        return data_flat, long_flat, lat_flat
 
     def convert_to_classification(self, surf_precip_data):
         # if model_name == "SVM":
@@ -429,6 +449,7 @@ class GISPrecip:
         # TODO: QGIS maps the data to colors based on min and max values, not based on the classes defined here
         self.dlg.Log("Creating precipitation intensity classes (0: No rain, 1: Light, 2: Moderate, 3: Heavy, 4: Violent)")
         y = surf_precip_data.flatten()
+        # self.dlg.Log(f"Precipitation data stats before classification: min={y.min()}, max={y.max()}, mean={y.mean()}, median={np.median(y)}, std={y.std()}")
         cat = np.zeros_like(y, dtype=int)
         cat[(y > 0.0) & (y < 2.5)] = 1  # Leve
         cat[(y >= 2.5) & (y < 10)] = 2  # Moderada
@@ -436,18 +457,24 @@ class GISPrecip:
         cat[(y >= 50)] = 4 # Violenta
         return cat
 
-    def preprocess_data(self, gmi_data, surf_precip_data, long, lat, under_sample=False):
+    def preprocess_data(self, gmi_data, surf_precip_data, rqi_data, long, lat, under_sample=False):
         """Preprocess the GMI and surface precipitation data."""
         self.dlg.Log("Preprocessing GMI and surface precipitation data...")
 
+        use_rqi = self.dlg.checkBox_RQI.isChecked()
         # Check if the data is valid
-        mask = np.isfinite(gmi_data).all(axis=1) & np.isfinite(surf_precip_data).flatten()
-        # mask = np.isfinite(surf_precip_data) & np.all(np.isfinite(gmi_data), axis=1)
+        mask = np.all(np.isfinite(gmi_data), axis=1) & np.isfinite(surf_precip_data).flatten()
         # Check if the data is masked
         if np.ma.isMaskedArray(gmi_data):
             mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
         if np.ma.isMaskedArray(surf_precip_data):
             mask &= ~np.ma.getmaskarray(surf_precip_data).flatten()
+        if use_rqi:
+            mask &= np.isfinite(rqi_data).flatten()
+            rqi_threshold = self.dlg.doubleSpinBox_RQIThreshold.value()
+            mask &= (rqi_data.flatten() >= rqi_threshold)
+            if np.ma.isMaskedArray(rqi_data):
+                mask &= ~np.ma.getmaskarray(rqi_data).flatten()
         # Remove invalid samples
         gmi_data = gmi_data[mask]
         surf_precip_data = surf_precip_data[mask]
@@ -473,8 +500,7 @@ class GISPrecip:
         self.dlg.Log("Preprocessing GMI and surface precipitation data...")
 
         # Check if the data is valid
-        mask = np.isfinite(gmi_data).all(axis=1) & np.isfinite(surf_precip_data).flatten()
-        # mask = np.isfinite(surf_precip_data) & np.all(np.isfinite(gmi_data), axis=1)
+        mask = np.all(np.isfinite(gmi_data), axis=1) & np.isfinite(surf_precip_data).flatten()
         # Check if the data is masked
         if np.ma.isMaskedArray(gmi_data):
             mask &= ~np.ma.getmaskarray(gmi_data).any(axis=1)
@@ -611,9 +637,7 @@ class GISPrecip:
 
         # Fill into full grid with NaNs
         y_pred_map = np.full(mask.shape, np.nan)
-
         y_pred_map[mask] = data
-
         y_pred_map = y_pred_map.reshape(width, height)
 
         # Write latitudes, longitudes.
@@ -663,47 +687,67 @@ class GISPrecip:
         # Collect selected GMI layers
         checkedLayers_GMI = self.dlg.comboBox_InputGMI.checkedItems()
         checkedLayers_SurfPrecip = self.dlg.comboBox_InputSurfPrecip.checkedItems()
+        checkedLayers_RQI = self.dlg.comboBox_InputRQI.checkedItems()
 
-        gmi_data_list, surf_precip_list, long_list, lat_list = [], [], [], []
+        gmi_data_list, surf_precip_list, rqi_data_list, long_list, lat_list = [], [], [], [], []
 
         model_name = self.dlg.comboBox_InputModel.currentText()
         self.trained_model_type = self.get_model_type(model_name) # this must be before preprocessing the data, since it is used there
 
-        # Process each GMI and surface precipitation layer as a pair
-        for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
-            selectedLayer_GMI = self.get_layer_by_name(gmi_name)
-            selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
-            bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
-            surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
+        if (self.dlg.checkBox_RQI.isChecked()):
+            if len(checkedLayers_RQI) != len(checkedLayers_GMI) or len(checkedLayers_RQI) != len(checkedLayers_SurfPrecip):
+                self.dlg.Log("The number of selected RQI layers must match the number of selected GMI and Surface Precipitation layers.")
+                self.is_train_running = False
+                self.dlg.progressBar_TrainModel.setRange(0, 1)
+                self.dlg.progressBar_TrainModel.setValue(0)
+                return
+            # Process each GMI, surface precipitation and RQI layer as a triplet
+            for gmi_name, precip_name, rqi_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip, checkedLayers_RQI):
+                selectedLayer_GMI = self.get_layer_by_name(gmi_name)
+                selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
+                selectedLayer_RQI = self.get_layer_by_name(rqi_name)
+                bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
+                surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
+                rqi, _, _ = self.get_RQI_data(selectedLayer_RQI)
 
-            # ====== FILTRO DE QUALIDADE ======
-            # surfPrecip, rqi, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
-            # min_rqi_threshold = 0.0
-            # mask_valid = (rqi >= min_rqi_threshold)
+                gmi_data_list.append(bands)
+                surf_precip_list.append(surfPrecip)
+                rqi_data_list.append(rqi)
+                long_list.append(long)
+                lat_list.append(lat)
+                
+        else:
+            if len(checkedLayers_GMI) != len(checkedLayers_SurfPrecip):
+                self.dlg.Log("The number of selected GMI layers must match the number of selected Surface Precipitation layers.")
+                self.is_train_running = False
+                self.dlg.progressBar_TrainModel.setRange(0, 1)
+                self.dlg.progressBar_TrainModel.setValue(0)
+                return
+            # Process each GMI and surface precipitation layer as a pair
+            for gmi_name, precip_name in zip(checkedLayers_GMI, checkedLayers_SurfPrecip):
+                selectedLayer_GMI = self.get_layer_by_name(gmi_name)
+                selectedLayer_SurfPrecip = self.get_layer_by_name(precip_name)
+                bands, long, lat = self.get_gmi_data(selectedLayer_GMI)
+                surfPrecip, _, _ = self.get_surf_precip_data(selectedLayer_SurfPrecip)
 
-            # Aplica máscara: NaN para valores ruins
-            # surfPrecip = np.where(mask_valid, surfPrecip, np.nan)
-
-            # ====== TRATAMENTO DE NAN ======
-            # nan_fill_value = -1.5
-            # bands = np.where(np.isnan(bands), nan_fill_value, bands)
-            # surfPrecip = np.where(np.isnan(surfPrecip), nan_fill_value, surfPrecip)
-            # ===============================
-
-            gmi_data_list.append(bands)
-            surf_precip_list.append(surfPrecip)
-            long_list.append(long)
-            lat_list.append(lat)
+                gmi_data_list.append(bands)
+                surf_precip_list.append(surfPrecip)
+                long_list.append(long)
+                lat_list.append(lat)
 
         # Concatenate all data (masked)
         bands = np.ma.concatenate(gmi_data_list, axis=0)
         long = np.ma.concatenate(long_list, axis=0)
         lat = np.ma.concatenate(lat_list, axis=0)
         surfPrecip = np.ma.concatenate(surf_precip_list, axis=0)
+        if self.dlg.checkBox_RQI.isChecked():
+            rqi = np.ma.concatenate(rqi_data_list, axis=0)
+        else:
+            rqi = None
 
         # Preprocess the data
         undersampling = self.dlg.checkBox_Undersampling.isChecked()
-        bands, surfPrecip, long, lat = self.preprocess_data(bands, surfPrecip, long, lat, under_sample=undersampling)
+        bands, surfPrecip, long, lat = self.preprocess_data(bands, surfPrecip, rqi, long, lat, under_sample=undersampling)
 
         # Create and train the SVM model
         if self.dlg.checkBox_Normalize.isChecked():
@@ -1231,6 +1275,13 @@ class GISPrecip:
             self.dlg.label_ConfusionMatrixPredicted.hide()
             self.dlg.tableWidget_ConfusionMatrixClassification.hide()
 
+    def on_rqi_checkbox_changed(self, state):
+        """Handle changes in the RQI checkbox state."""
+        self.dlg.comboBox_InputRQI.setEnabled(state)
+        self.dlg.label_RQIData.setEnabled(state)
+        self.dlg.doubleSpinBox_RQIThreshold.setEnabled(state)
+        self.dlg.label_RQIThreshold.setEnabled(state)
+
     def open_documentation(self):
         """Open the documentation for the plugin"""
         webbrowser.open("https://github.com/RP-Group/GISPrecip")
@@ -1252,6 +1303,7 @@ class GISPrecip:
             self.dlg.button_ExportModel.clicked.connect(self.save_model)
             self.dlg.button_LoadModel.clicked.connect(self.load_model)
             self.dlg.toolButton_Help.clicked.connect(self.open_documentation)
+            self.dlg.checkBox_RQI.stateChanged.connect(self.on_rqi_checkbox_changed)
 
             # Init task queue
             self.task_queue = TaskQueue(self.dlg)
@@ -1267,11 +1319,16 @@ class GISPrecip:
         # Clear the contents of the comboBox and lineEdit from previous runs
         self.dlg.comboBox_InputGMI.clear()
         self.dlg.comboBox_InputSurfPrecip.clear()
+        self.dlg.comboBox_InputRQI.clear()
+        self.dlg.comboBox_TestGMI.clear()
+        self.dlg.comboBox_TestSurfPrecip.clear()
+        self.dlg.comboBox_ForecastGMI.clear()
         # self.dlg.lineEdit.clear()
         # Populate the comboBox with names of all the loaded layers
         self.dlg.comboBox_InputGMI.addItems([layer.name() for layer in all_layers])
-        self.dlg.comboBox_TestGMI.addItems([layer.name() for layer in all_layers])
         self.dlg.comboBox_InputSurfPrecip.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_InputRQI.addItems([layer.name() for layer in all_layers])
+        self.dlg.comboBox_TestGMI.addItems([layer.name() for layer in all_layers])
         self.dlg.comboBox_TestSurfPrecip.addItems([layer.name() for layer in all_layers])
         self.dlg.comboBox_ForecastGMI.addItems([layer.name() for layer in all_layers])
 

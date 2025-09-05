@@ -23,7 +23,7 @@
   <layout class="QVBoxLayout" name="verticalLayout_16">
    <item>
     <layout class="QGridLayout" name="mainGridLayout">
-     <item row="0" column="1">
+     <item row="0" column="0">
       <widget class="QTabWidget" name="tabWidget">
        <property name="layoutDirection">
         <enum>Qt::LeftToRight</enum>
@@ -89,34 +89,134 @@
                <item row="3" column="0">
                 <widget class="QLabel" name="Label_RadarData_10">
                  <property name="text">
-                  <string>Preprocess</string>
+                  <string>Preprocess:</string>
                  </property>
                 </widget>
                </item>
                <item row="3" column="1">
-                <layout class="QVBoxLayout" name="verticalLayout_3">
-                 <item>
+                <layout class="QFormLayout" name="formLayout_2">
+                 <property name="topMargin">
+                  <number>2</number>
+                 </property>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="normalizeLabel">
+                   <property name="text">
+                    <string>Normalize:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
                   <widget class="QCheckBox" name="checkBox_Normalize">
                    <property name="text">
-                    <string>Normalize</string>
+                    <string/>
                    </property>
                    <property name="checked">
                     <bool>true</bool>
                    </property>
                   </widget>
                  </item>
-                 <item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="label">
+                   <property name="text">
+                    <string>Undersampling:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
                   <widget class="QCheckBox" name="checkBox_Undersampling">
                    <property name="toolTip">
                     <string>Useful only for classification models</string>
                    </property>
                    <property name="text">
-                    <string>Undersampling</string>
+                    <string/>
                    </property>
                    <property name="checked">
                     <bool>false</bool>
                    </property>
                   </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QLabel" name="label_3">
+                   <property name="toolTip">
+                    <string/>
+                   </property>
+                   <property name="text">
+                    <string>Radar Quality Index:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <layout class="QFormLayout" name="formLayout_3">
+                   <property name="topMargin">
+                    <number>4</number>
+                   </property>
+                   <item row="0" column="0">
+                    <widget class="QLabel" name="label_2">
+                     <property name="text">
+                      <string>Enable:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="label_RQIData">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="toolTip">
+                      <string>Radar Quality Index Data</string>
+                     </property>
+                     <property name="text">
+                      <string>Data:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1">
+                    <widget class="QgsCheckableComboBox" name="comboBox_InputRQI">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="toolTip">
+                      <string>Radar Quality Index Data</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="0">
+                    <widget class="QLabel" name="label_RQIThreshold">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>Threshold</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_RQIThreshold">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="decimals">
+                      <number>3</number>
+                     </property>
+                     <property name="maximum">
+                      <double>1.000000000000000</double>
+                     </property>
+                     <property name="singleStep">
+                      <double>0.100000000000000</double>
+                     </property>
+                     <property name="value">
+                      <double>0.500000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1">
+                    <widget class="QCheckBox" name="checkBox_RQI">
+                     <property name="text">
+                      <string/>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                 </layout>
                </item>
@@ -219,7 +319,7 @@
               <x>0</x>
               <y>0</y>
               <width>561</width>
-              <height>153</height>
+              <height>560</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -316,233 +416,13 @@
                </item>
               </layout>
              </item>
-            </layout>
-           </widget>
-          </widget>
-         </item>
-         <item>
-          <widget class="QTableWidget" name="tableWidget_ModelMetrics">
-           <property name="enabled">
-            <bool>true</bool>
-           </property>
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>40</height>
-            </size>
-           </property>
-           <property name="sizeAdjustPolicy">
-            <enum>QAbstractScrollArea::AdjustToContents</enum>
-           </property>
-           <property name="alternatingRowColors">
-            <bool>true</bool>
-           </property>
-           <property name="rowCount">
-            <number>1</number>
-           </property>
-           <property name="columnCount">
-            <number>5</number>
-           </property>
-           <attribute name="horizontalHeaderCascadingSectionResizes">
-            <bool>false</bool>
-           </attribute>
-           <attribute name="horizontalHeaderMinimumSectionSize">
-            <number>20</number>
-           </attribute>
-           <attribute name="horizontalHeaderDefaultSectionSize">
-            <number>60</number>
-           </attribute>
-           <attribute name="verticalHeaderMinimumSectionSize">
-            <number>20</number>
-           </attribute>
-           <attribute name="verticalHeaderDefaultSectionSize">
-            <number>20</number>
-           </attribute>
-           <row>
-            <property name="text">
-             <string>Model</string>
-            </property>
-           </row>
-           <column>
-            <property name="text">
-             <string>Bias</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>MSE</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>MAE</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>SMAPE</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>Lin. Corr.</string>
-            </property>
-           </column>
-           <item row="0" column="0">
-            <property name="text">
-             <string/>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item>
-          <widget class="QTableWidget" name="tableWidget_MetricsClassification">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>205</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <attribute name="horizontalHeaderMinimumSectionSize">
-            <number>20</number>
-           </attribute>
-           <attribute name="horizontalHeaderDefaultSectionSize">
-            <number>75</number>
-           </attribute>
-           <attribute name="horizontalHeaderHighlightSections">
-            <bool>true</bool>
-           </attribute>
-           <attribute name="verticalHeaderMinimumSectionSize">
-            <number>20</number>
-           </attribute>
-           <attribute name="verticalHeaderDefaultSectionSize">
-            <number>23</number>
-           </attribute>
-           <row>
-            <property name="text">
-             <string>No Rain</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Soft Rain</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Moderate Rain</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Heavy Rain</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Violent Rain</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Total</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Macro Avg</string>
-            </property>
-           </row>
-           <row>
-            <property name="text">
-             <string>Weighted Avg</string>
-            </property>
-           </row>
-           <column>
-            <property name="text">
-             <string>Precision</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>Recall</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>F1-Score</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>Support</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>Accurary</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-         <item>
-          <layout class="QVBoxLayout" name="verticalLayout_5">
-           <item>
-            <widget class="QLabel" name="label_ConfusionMatrixPredicted">
-             <property name="autoFillBackground">
-              <bool>true</bool>
-             </property>
-             <property name="text">
-              <string>Predicted</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="horizontalLayout">
              <item>
-              <widget class="QLabel" name="label_ConfusionMatrixActual">
-               <property name="autoFillBackground">
+              <widget class="QTableWidget" name="tableWidget_ModelMetrics">
+               <property name="enabled">
                 <bool>true</bool>
                </property>
-               <property name="text">
-                <string>Actual</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignCenter</set>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QTableWidget" name="tableWidget_ConfusionMatrixClassification">
                <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
@@ -550,26 +430,35 @@
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>120</height>
+                 <height>0</height>
                 </size>
                </property>
                <property name="maximumSize">
                 <size>
                  <width>16777215</width>
-                 <height>16777215</height>
+                 <height>40</height>
                 </size>
                </property>
+               <property name="sizeAdjustPolicy">
+                <enum>QAbstractScrollArea::AdjustToContents</enum>
+               </property>
+               <property name="alternatingRowColors">
+                <bool>true</bool>
+               </property>
                <property name="rowCount">
-                <number>5</number>
+                <number>1</number>
                </property>
                <property name="columnCount">
                 <number>5</number>
                </property>
+               <attribute name="horizontalHeaderCascadingSectionResizes">
+                <bool>false</bool>
+               </attribute>
                <attribute name="horizontalHeaderMinimumSectionSize">
                 <number>20</number>
                </attribute>
                <attribute name="horizontalHeaderDefaultSectionSize">
-                <number>85</number>
+                <number>60</number>
                </attribute>
                <attribute name="verticalHeaderMinimumSectionSize">
                 <number>20</number>
@@ -579,6 +468,78 @@
                </attribute>
                <row>
                 <property name="text">
+                 <string>Model</string>
+                </property>
+               </row>
+               <column>
+                <property name="text">
+                 <string>Bias</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>MSE</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>MAE</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>SMAPE</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Lin. Corr.</string>
+                </property>
+               </column>
+               <item row="0" column="0">
+                <property name="text">
+                 <string/>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item>
+              <widget class="QTableWidget" name="tableWidget_MetricsClassification">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>205</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>16777215</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <attribute name="horizontalHeaderMinimumSectionSize">
+                <number>20</number>
+               </attribute>
+               <attribute name="horizontalHeaderDefaultSectionSize">
+                <number>75</number>
+               </attribute>
+               <attribute name="horizontalHeaderHighlightSections">
+                <bool>true</bool>
+               </attribute>
+               <attribute name="verticalHeaderMinimumSectionSize">
+                <number>20</number>
+               </attribute>
+               <attribute name="verticalHeaderDefaultSectionSize">
+                <number>23</number>
+               </attribute>
+               <row>
+                <property name="text">
                  <string>No Rain</string>
                 </property>
                </row>
@@ -602,36 +563,175 @@
                  <string>Violent Rain</string>
                 </property>
                </row>
+               <row>
+                <property name="text">
+                 <string>Total</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Macro Avg</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Weighted Avg</string>
+                </property>
+               </row>
                <column>
                 <property name="text">
-                 <string>No Rain</string>
+                 <string>Precision</string>
                 </property>
                </column>
                <column>
                 <property name="text">
-                 <string>Soft Rain</string>
+                 <string>Recall</string>
                 </property>
                </column>
                <column>
                 <property name="text">
-                 <string>Moderate Rain</string>
+                 <string>F1-Score</string>
                 </property>
                </column>
                <column>
                 <property name="text">
-                 <string>Heavy Rain</string>
+                 <string>Support</string>
                 </property>
                </column>
                <column>
                 <property name="text">
-                 <string>Violent Rain</string>
+                 <string>Accurary</string>
                 </property>
                </column>
               </widget>
              </item>
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_5">
+               <item>
+                <widget class="QLabel" name="label_ConfusionMatrixPredicted">
+                 <property name="autoFillBackground">
+                  <bool>true</bool>
+                 </property>
+                 <property name="text">
+                  <string>Predicted</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout">
+                 <item>
+                  <widget class="QLabel" name="label_ConfusionMatrixActual">
+                   <property name="autoFillBackground">
+                    <bool>true</bool>
+                   </property>
+                   <property name="text">
+                    <string>Actual</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QTableWidget" name="tableWidget_ConfusionMatrixClassification">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>120</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>16777215</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="rowCount">
+                    <number>5</number>
+                   </property>
+                   <property name="columnCount">
+                    <number>5</number>
+                   </property>
+                   <attribute name="horizontalHeaderMinimumSectionSize">
+                    <number>20</number>
+                   </attribute>
+                   <attribute name="horizontalHeaderDefaultSectionSize">
+                    <number>85</number>
+                   </attribute>
+                   <attribute name="verticalHeaderMinimumSectionSize">
+                    <number>20</number>
+                   </attribute>
+                   <attribute name="verticalHeaderDefaultSectionSize">
+                    <number>20</number>
+                   </attribute>
+                   <row>
+                    <property name="text">
+                     <string>No Rain</string>
+                    </property>
+                   </row>
+                   <row>
+                    <property name="text">
+                     <string>Soft Rain</string>
+                    </property>
+                   </row>
+                   <row>
+                    <property name="text">
+                     <string>Moderate Rain</string>
+                    </property>
+                   </row>
+                   <row>
+                    <property name="text">
+                     <string>Heavy Rain</string>
+                    </property>
+                   </row>
+                   <row>
+                    <property name="text">
+                     <string>Violent Rain</string>
+                    </property>
+                   </row>
+                   <column>
+                    <property name="text">
+                     <string>No Rain</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Soft Rain</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Moderate Rain</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Heavy Rain</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Violent Rain</string>
+                    </property>
+                   </column>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </item>
             </layout>
-           </item>
-          </layout>
+           </widget>
+          </widget>
          </item>
          <item>
           <widget class="QToolButton" name="toolButton_AssessmentHelp">
